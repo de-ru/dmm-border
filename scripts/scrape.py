@@ -3,32 +3,17 @@
 """
 DMMぱちタウン (p-town.dmm.com) ボーダーデータ取得スクリプト
 --------------------------------------------------------------------------
-【概要】
-- 対象: https://p-town.dmm.com/machine_borders
-- 内部API (XHR): https://p-town.dmm.com/ajax/machines/borders?page={page}
-- 抽出項目:
-  - id: 機種ID
-  - name: 機種名
-  - maker: メーカー名
-  - border: 基準ボーダー値 (数値化できる場合は float、できなければ元テキスト)
-  - border_raw: 元のボーダーテキスト
-  - border_equal: 等価ボーダー数値 (Webアプリ連携用)
-  - borders: 代表換金率のマップ (Webアプリ連携用)
-  - url: 機種詳細・解析ページURL (https://p-town.dmm.com/machines/{id})
-  - type / category: スペックタイプ (ミドル/スマパチ/P機等)
-  - updated_at: 取得日時 (YYYY-MM-DD)
-【安全機能】
-- ページ間待機時間 (デフォルト 2.0秒)
-- 機種ID・機種名による重複排除
-- 取得件数0件またはエラー発生時、既存の data/borders.json を絶対に壊さないフェイルセーフ
-- 一時ファイル経由のアトミック書き込み
-- docs/data/borders.json との自動同期
-【403 Forbidden 対策・堅牢化設計】
-1. requests.Session() による Cookie とセッションの完全維持
-2. page=1 のリダイレクト (301) 回避: page=1 はパラメータなしの正規化URLへアクセス
-3. urllib フォールバック時も CookieJar + ヘッダー維持型リダイレクトハンドラを適用
-4. 親ページ (https://p-town.dmm.com/machine_borders) への初期アクセスで Laravel Cookie 取得
-5. Sec-Ch-Ua, Sec-Fetch-*, X-Requested-With 等の完全ブラウザヘッダー送信
+【運用方針: ローカル全件取得 + 自動更新で1ページ新着マージ】
+1. 差分マージ方式:
+   - 既存の data/borders.json を読み込み、ID/機種名で保持
+   - 新規取得した機種データを既存データと統合 (新台は先頭に追加、既存台は更新)
+   - 既存の過去機種データは絶対に消失しない
+2. 実行モード:
+   - incremental (デフォルト): 1ページ目の新着台のみを取得して既存データにマージ (GitHub Actions向け)
+   - full (または --all): 全ページ (約103ページ) を取得して一括構築 (ローカル実行向け)
+3. 堅牢なフェイルセーフ:
+   - ネットワーク遮断や403等のエラー時でも、既存データを100%保護
+   - --allow-fail 指定時は、CI上で落ちずに既存データを維持して終了
 --------------------------------------------------------------------------
 """
 
@@ -45,7 +30,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Union
 
-# requests があれば優先使用
 try:
     import requests
 except ImportError:
@@ -57,17 +41,10 @@ DATA_PATH = BASE_DIR / "data" / "borders.json"
 DOCS_DATA_PATH = BASE_DIR / "docs" / "data" / "borders.json"
 BACKUP_PATH = BASE_DIR / "data" / "borders.backup.json"
 
-# APIエンドポイント
 # エンドポイント
 TOP_PAGE_URL = "https://p-town.dmm.com/machine_borders"
 API_BASE_URL = "https://p-town.dmm.com/ajax/machines/borders"
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
 
-# ブラウザ完全擬態ヘッダー
 COMMON_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -88,7 +65,6 @@ COMMON_HEADERS = {
 
 
 class HeaderPreservingRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """301/302 リダイレクト時にもカスタムヘッダーを保持するハンドラ"""
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
         if new_req:
@@ -98,8 +74,6 @@ class HeaderPreservingRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 
 class P舍Client:
-    """セッションCookieとヘッダーを維持して通信を行うクライアント"""
-
     def __init__(self):
         self.use_requests = requests is not None
         if self.use_requests:
@@ -112,9 +86,8 @@ class P舍Client:
                 HeaderPreservingRedirectHandler(),
             )
 
-    def init_session(self):
-        """トップページを訪問してセッションCookie（XSRF-TOKEN / laravel_session）を確立"""
-        print(f"[INFO] セッションCookieを初期化中... ({TOP_PAGE_URL})")
+    def init_session(self) -> bool:
+        """トップページを訪問してCookieを確立"""
         top_headers = dict(COMMON_HEADERS)
         top_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
         top_headers["Sec-Fetch-Dest"] = "document"
@@ -124,17 +97,16 @@ class P舍Client:
         try:
             if self.use_requests:
                 resp = self.session.get(TOP_PAGE_URL, headers=top_headers, timeout=15)
-                resp.raise_for_status()
+                return resp.status_code == 200
             else:
                 req = urllib.request.Request(TOP_PAGE_URL, headers=top_headers)
                 with self.opener.open(req, timeout=15) as resp:
-                    resp.read()
-            print("[INFO] セッションCookieの初期化に成功しました。")
+                    return resp.status == 200
         except Exception as e:
-            print(f"[WARN] セッションCookie初期化時に警告 (処理は続行します): {e}", file=sys.stderr)
+            print(f"[WARN] セッション初期化時に警告 (処理を続行します): {e}", file=sys.stderr)
+            return False
 
     def get_json(self, url: str) -> Dict[str, Any]:
-        """指定URLからJSONを取得"""
         if self.use_requests:
             resp = self.session.get(url, timeout=15)
             resp.raise_for_status()
@@ -147,19 +119,12 @@ class P舍Client:
 
 
 def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Optional[float], Dict[str, float]]:
-    """
-    ボーダーテキストから基準ボーダー値 (等価4.0円または設定1) を抽出する
-    Returns:
-        (border_val, border_equal, borders_dict)
-    """
-    """ボーダーテキストから基準ボーダー値 (等価4.0円または設定1) を抽出"""
     if not raw_text or not isinstance(raw_text, str):
         return ("情報なし", None, {})
 
     text = raw_text.strip()
     borders_dict: Dict[str, float] = {}
 
-    # 1. 換金率別の数値を抽出 (4.0円, 3.57円/3.5円, 3.33円/3.3円, 3.03円/3.0円, 2.50円/2.5円 等)
     patterns = {
         "4.00": [
             r"4\.0円[^\d\n]*?[…\:\s](\d+\.?\d*)\s*回転?",
@@ -200,13 +165,10 @@ def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Opti
                 except ValueError:
                     continue
 
-    # 2. 基準ボーダーの選定
-    # 4.0円がある場合
     if "4.00" in borders_dict:
         val = borders_dict["4.00"]
         return (val, val, borders_dict)
 
-    # 設定付きパチンコの場合 (設定1を基準値とする)
     m_set1 = re.search(r"設定1[^\d\n]*?[…\:\s](\d+\.?\d*)\s*回転?", text)
     if m_set1:
         try:
@@ -216,7 +178,6 @@ def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Opti
         except ValueError:
             pass
 
-    # 単一の「〇.〇回転」表記の場合
     m_single = re.search(r"(\d{1,2}\.\d)\s*回転", text)
     if m_single:
         try:
@@ -226,13 +187,10 @@ def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Opti
         except ValueError:
             pass
 
-    # 数値化できない場合は元テキストをそのまま保持
     return (text, None, borders_dict)
 
 
 def determine_category_and_type(name: str, desc: str) -> Tuple[str, str]:
-    """機種名や説明文からカテゴリ(e機/P機/羽根モノ)とスペック種別を判定"""
-    """機種名や説明文からカテゴリとスペック種別を判定"""
     category = "P機"
     spec_type = "パチンコ"
 
@@ -252,28 +210,7 @@ def determine_category_and_type(name: str, desc: str) -> Tuple[str, str]:
     return category, spec_type
 
 
-def fetch_page(page: int, timeout: int = 15) -> Dict[str, Any]:
-    """指定ページのAPIデータを取得"""
-    url = f"{API_BASE_URL}?page={page}"
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": "https://p-town.dmm.com/machine_borders",
-        },
-    )
-
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"HTTP Status {resp.status} for {url}")
-        content = resp.read().decode("utf-8")
-        return json.loads(content)
-
-
 def load_existing_data() -> List[Dict[str, Any]]:
-    """既存の data/borders.json を読み込み"""
     if not DATA_PATH.exists():
         return []
     try:
@@ -286,14 +223,12 @@ def load_existing_data() -> List[Dict[str, Any]]:
 
 
 def create_backup(existing_data: List[Dict[str, Any]]) -> bool:
-    """既存データのバックアップを作成"""
     if not existing_data:
         return False
     try:
         BACKUP_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(BACKUP_PATH, "w", encoding="utf-8") as f:
             json.dump(existing_data, f, ensure_ascii=False, indent=2)
-        print(f"[INFO] 既存データのバックアップを作成しました: {BACKUP_PATH}")
         return True
     except Exception as e:
         print(f"[WARN] バックアップ作成失敗: {e}", file=sys.stderr)
@@ -301,7 +236,6 @@ def create_backup(existing_data: List[Dict[str, Any]]) -> bool:
 
 
 def save_atomic(data: List[Dict[str, Any]]) -> bool:
-    """アトミックに書き込みを行い、docs/data/borders.json も同期更新"""
     tmp_path = DATA_PATH.with_suffix(".tmp")
     docs_tmp_path = DOCS_DATA_PATH.with_suffix(".tmp")
 
@@ -311,12 +245,10 @@ def save_atomic(data: List[Dict[str, Any]]) -> bool:
 
         json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
 
-        # data/borders.json
         with open(tmp_path, "wb") as f:
             f.write(json_bytes)
         os.replace(tmp_path, DATA_PATH)
 
-        # docs/data/borders.json
         with open(docs_tmp_path, "wb") as f:
             f.write(json_bytes)
         os.replace(docs_tmp_path, DOCS_DATA_PATH)
@@ -331,24 +263,73 @@ def save_atomic(data: List[Dict[str, Any]]) -> bool:
         return False
 
 
-def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, dry_run: bool = False) -> List[Dict[str, Any]]:
+def merge_items(existing_list: List[Dict[str, Any]], new_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int, int]:
     """
-    複数ページをループ取得してデータを整形・保存する
+    既存データと新規データをマージする
+    - 新着機種（未登録）: リストの先頭に追加
+    - 既存機種: 最新のボーダー情報に更新
+    - 取得されなかった過去機種: そのまま100%保持
+    Returns:
+        (merged_list, added_count, updated_count)
+    """
+    # 既存データのマップ化（キー: id）
+    existing_map: Dict[str, Dict[str, Any]] = {}
+    for item in existing_list:
+        if isinstance(item, dict) and "id" in item:
+            existing_map[item["id"]] = item
+
+    added_items: List[Dict[str, Any]] = []
+    updated_count = 0
+
+    # 新規アイテムをチェック
+    for item in new_items:
+        m_id = item["id"]
+        if m_id in existing_map:
+            # 既存台の更新
+            existing_map[m_id].update(item)
+            updated_count += 1
+        else:
+            # 新着台（新規追加）
+            added_items.append(item)
+            existing_map[m_id] = item
+
+    # 新規追加されたアイテムを先頭に、既存リストをマージ
+    merged_list = added_items + [item for item in existing_list if item["id"] not in {a["id"] for a in added_items}]
+
+    return merged_list, len(added_items), updated_count
+
+
+def scrape_borders(
+    mode: str = "incremental",
+    max_pages: Optional[int] = None,
+    delay_seconds: float = 1.0,
+    allow_fail: bool = False,
+    dry_run: bool = False
+) -> List[Dict[str, Any]]:
+    """
+    ボーダーデータを取得してマージ保存する
+    - mode="incremental": 1ページ目 (新着) のみ取得し既存データとマージ
+    - mode="full": 全ページ取得して既存データとマージ
     """
     print("=" * 60)
-    print("DMMぱちタウン ボーダーデータ取得処理を開始します")
-    print(f"最大ページ数: {max_pages if max_pages else '全ページ'}, ページ間待機: {delay_seconds}秒")
+    print(f"DMMぱちタウン ボーダーデータ収集・更新 (モード: {mode})")
     print("=" * 60)
 
-    # 1. 既存データのバックアップ
     existing_data = load_existing_data()
+    print(f"[INFO] 既存データ件数: {len(existing_data)} 件")
     if existing_data and not dry_run:
         create_backup(existing_data)
 
     client = P舍Client()
     client.init_session()
 
-    collected_items: List[Dict[str, Any]] = []
+    # モードに応じた取得ページ数決定
+    if mode == "incremental":
+        target_max_pages = max_pages if max_pages is not None else 1
+    else:
+        target_max_pages = max_pages  # Noneなら全ページ
+
+    fetched_items: List[Dict[str, Any]] = []
     seen_ids = set()
     today_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -357,52 +338,33 @@ def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, 
 
     try:
         while True:
-            if max_pages and page > max_pages:
-                print(f"[INFO] 指定最大ページ ({max_pages}) に達したためループを終了します。")
+            if target_max_pages and page > target_max_pages:
                 break
 
-            print(f"[INFO] ページ {page} を取得中... ({API_BASE_URL}?page={page})")
-            data = fetch_page(page)
-            # 301 リダイレクト回避: page=1 の場合はクエリなしの正規化URLを使用
-            if page == 1:
-                target_url = API_BASE_URL
-            else:
-                target_url = f"{API_BASE_URL}?page={page}"
-
+            target_url = API_BASE_URL if page == 1 else f"{API_BASE_URL}?page={page}"
             print(f"[INFO] ページ {page} を取得中... ({target_url})")
+            
             data = client.get_json(target_url)
-
             items = data.get("data", [])
             total_pages = data.get("last_page", total_pages)
-            total_count = data.get("total", 0)
 
             if not items:
-                print(f"[INFO] ページ {page} のデータが空です。取得を終了します。")
                 break
 
             for raw in items:
                 machine_id = str(raw.get("id"))
                 name = raw.get("name", "").strip()
-
-                if not name:
-                    continue
-
-                # 重複排除
-                if machine_id in seen_ids:
+                if not name or machine_id in seen_ids:
                     continue
                 seen_ids.add(machine_id)
 
                 maker_info = raw.get("maker") or {}
                 maker_name = maker_info.get("name", "") if isinstance(maker_info, dict) else ""
-
                 border_info = raw.get("border") or {}
                 border_raw = border_info.get("border", "") if isinstance(border_info, dict) else ""
 
                 border_val, border_equal, borders_map = parse_border_value(border_raw)
-
-                # 詳細URL (https://p-town.dmm.com/machines/{id})
                 detail_url = f"https://p-town.dmm.com/machines/{machine_id}" if machine_id else ""
-
                 category, spec_type = determine_category_and_type(name, raw.get("description", ""))
 
                 release_date = ""
@@ -426,13 +388,11 @@ def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, 
                     "notes": (border_raw.replace("\r\n", " ").replace("\n", " ").strip())[:120] if border_raw else "",
                     "updated_at": today_str,
                 }
+                fetched_items.append(formatted_item)
 
-                collected_items.append(formatted_item)
-
-            print(f"[INFO] ページ {page}/{total_pages} 取得完了 (現在累計: {len(collected_items)} 件)")
+            print(f"[INFO] ページ {page}/{total_pages} 取得完了 (今回取得累計: {len(fetched_items)} 件)")
 
             if page >= total_pages:
-                print("[INFO] 最終ページに到達しました。")
                 break
 
             page += 1
@@ -440,46 +400,67 @@ def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, 
                 time.sleep(delay_seconds)
 
     except Exception as e:
-        print(f"[ERROR] 取得処理中にエラーが発生しました: {e}", file=sys.stderr)
-        print("【安全装置発動】既存データを保護するため、更新を行わずに終了します。", file=sys.stderr)
-        if not dry_run:
-            sys.exit(1)
-        return collected_items
+        print(f"[ERROR] データ取得中にエラーが発生しました: {e}", file=sys.stderr)
+        if allow_fail:
+            print("[INFO] --allow-fail が指定されているため、既存データを維持して正常終了します。")
+            return existing_data
+        else:
+            print("【安全装置発動】既存データを保護するため処理を中断します。", file=sys.stderr)
+            if not dry_run:
+                sys.exit(1)
+            return existing_data
 
-    # 3. 安全性検証 (件数が0件の場合は絶対に上書きしない)
-    if len(collected_items) == 0:
-        print("[ERROR] 取得できたデータが 0 件です。", file=sys.stderr)
-        print("【安全装置発動】既存の data/borders.json を破棄せず処理を中断します。", file=sys.stderr)
-        if not dry_run:
-            sys.exit(1)
-        return []
+    if len(fetched_items) == 0:
+        if allow_fail:
+            print("[INFO] 取得件数が0件のため、既存データを維持して終了します。")
+            return existing_data
+        else:
+            print("[ERROR] 取得件数が0件です。既存データを保護します。", file=sys.stderr)
+            if not dry_run:
+                sys.exit(1)
+            return existing_data
+
+    # 既存データとマージ
+    final_list, added_count, updated_count = merge_items(existing_data, fetched_items)
 
     print("-" * 60)
-    print(f"取得成功: 合計 {len(collected_items)} 件 (ユニーク)")
+    print(f"マージ完了: 新着追加 {added_count} 件 / 既存更新 {updated_count} 件 / 総保持件数 {len(final_list)} 件")
     print("-" * 60)
 
-    # 4. 保存
     if dry_run:
-        print("[INFO] dry-run モードのため、ファイル保存はスキップします。")
+        print("[INFO] dry-run モードのため保存をスキップします。")
     else:
-        success = save_atomic(collected_items)
+        success = save_atomic(final_list)
         if success:
-            print(f"[SUCCESS] {DATA_PATH} および {DOCS_DATA_PATH} に正常保存されました。")
+            print(f"[SUCCESS] {DATA_PATH} および {DOCS_DATA_PATH} を正常更新しました。")
         else:
             print("[ERROR] ファイル保存に失敗しました。", file=sys.stderr)
             sys.exit(1)
 
-    return collected_items
+    return final_list
 
 
 def main():
-    parser = argparse.ArgumentParser(description="DMMぱちタウンのボーダー情報を取得してJSONに保存します")
-    parser.add_argument("--max-pages", type=int, default=None, help="取得する最大ページ数 (省略時は全ページ)")
-    parser.add_argument("--delay", type=float, default=2.0, help="ページ間の待機秒数 (デフォルト: 2.0秒)")
-    parser.add_argument("--dry-run", action="store_true", help="ファイルへの書き込みを行わず取得のみ確認")
+    parser = argparse.ArgumentParser(description="DMMぱちタウンのボーダー情報を取得・マージします")
+    parser.add_argument(
+        "--mode",
+        choices=["incremental", "full"],
+        default="incremental",
+        help="実行モード: incremental (新着1ページをマージ) または full (全件取得マージ)"
+    )
+    parser.add_argument("--max-pages", type=int, default=None, help="取得する最大ページ数 (省略時はモード既定)")
+    parser.add_argument("--delay", type=float, default=1.0, help="ページ間待機秒数 (デフォルト: 1.0秒)")
+    parser.add_argument("--allow-fail", action="store_true", help="通信エラー時も既存データを保護してexit 0で終了 (CI用)")
+    parser.add_argument("--dry-run", action="store_true", help="書き込みを行わないテスト実行")
     args = parser.parse_args()
 
-    scrape_borders(max_pages=args.max_pages, delay_seconds=args.delay, dry_run=args.dry_run)
+    scrape_borders(
+        mode=args.mode,
+        max_pages=args.max_pages,
+        delay_seconds=args.delay,
+        allow_fail=args.allow_fail,
+        dry_run=args.dry_run
+    )
 
 
 if __name__ == "__main__":

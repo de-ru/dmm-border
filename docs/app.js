@@ -25,6 +25,7 @@
     rentalRate: 4, // 4 or 1 円パチンコ
     // モーダル
     currentSimMachine: null,
+    displayLimit: 60,
   };
 
   // ==========================================================================
@@ -272,9 +273,14 @@
 
   function render() {
     updateSettingSummary();
-    const machines = getFilteredAndSortedMachines();
+    const allFiltered = getFilteredAndSortedMachines();
+    const totalCount = allFiltered.length;
 
-    if (machines.length === 0) {
+    if (els.itemCount) {
+      els.itemCount.textContent = `表示中: ${Math.min(state.displayLimit, totalCount)} / ${totalCount} 件 (全${state.machines.length}件)`;
+    }
+
+    if (totalCount === 0) {
       els.cardContainer.classList.add('hidden');
       els.tableContainer.classList.add('hidden');
       els.emptyState.classList.remove('hidden');
@@ -282,20 +288,21 @@
     }
 
     els.emptyState.classList.add('hidden');
+    const displayList = allFiltered.slice(0, state.displayLimit);
 
     if (state.viewMode === 'card') {
       els.cardContainer.classList.remove('hidden');
       els.tableContainer.classList.add('hidden');
-      renderCards(machines);
+      renderCards(displayList, totalCount);
     } else {
       els.cardContainer.classList.add('hidden');
       els.tableContainer.classList.remove('hidden');
-      renderTable(machines);
+      renderTable(displayList, totalCount);
     }
   }
 
   // カード表示のレンダリング
-  function renderCards(machines) {
+  function renderCards(machines, totalCount) {
     els.cardContainer.innerHTML = '';
     const fragment = document.createDocumentFragment();
 
@@ -388,10 +395,28 @@
     });
 
     els.cardContainer.appendChild(fragment);
+
+    // さらに表示ボタン
+    if (machines.length < totalCount) {
+      const moreCard = document.createElement('div');
+      moreCard.style.gridColumn = '1 / -1';
+      moreCard.style.textAlign = 'center';
+      moreCard.style.padding = '1.5rem';
+      moreCard.innerHTML = `
+        <button id="loadMoreBtn" class="btn-primary" style="padding: 0.8rem 2rem;">
+          さらに表示する (残り ${totalCount - machines.length} 件)
+        </button>
+      `;
+      els.cardContainer.appendChild(moreCard);
+      document.getElementById('loadMoreBtn').addEventListener('click', () => {
+        state.displayLimit += 60;
+        render();
+      });
+    }
   }
 
   // テーブル表示のレンダリング
-  function renderTable(machines) {
+  function renderTable(machines, totalCount) {
     els.tableBody.innerHTML = '';
     const fragment = document.createDocumentFragment();
 
@@ -422,6 +447,23 @@
     });
 
     els.tableBody.appendChild(fragment);
+
+    // テーブル用のさらに表示ボタン
+    if (machines.length < totalCount) {
+      const moreTr = document.createElement('tr');
+      moreTr.innerHTML = `
+        <td colspan="7" style="text-align: center; padding: 1.25rem;">
+          <button id="loadMoreTableBtn" class="btn-primary" style="padding: 0.6rem 1.5rem;">
+            さらに表示する (残り ${totalCount - machines.length} 件)
+          </button>
+        </td>
+      `;
+      els.tableBody.appendChild(moreTr);
+      document.getElementById('loadMoreTableBtn').addEventListener('click', () => {
+        state.displayLimit += 60;
+        render();
+      });
+    }
   }
 
   // ==========================================================================
@@ -566,12 +608,14 @@
     // 検索入力
     els.searchInput.addEventListener('input', (e) => {
       state.searchQuery = e.target.value;
+      state.displayLimit = 60;
       els.clearSearchBtn.classList.toggle('hidden', state.searchQuery === '');
       render();
     });
 
     els.clearSearchBtn.addEventListener('click', () => {
       state.searchQuery = '';
+      state.displayLimit = 60;
       els.searchInput.value = '';
       els.clearSearchBtn.classList.add('hidden');
       render();
@@ -581,6 +625,7 @@
     // カテゴリフィルター
     els.filterChips.forEach(chip => {
       chip.addEventListener('click', () => {
+        state.displayLimit = 60;
         const filterType = chip.dataset.filterType;
         const val = chip.dataset.val;
 
@@ -601,6 +646,7 @@
     // ソート順
     els.sortSelect.addEventListener('change', (e) => {
       state.sortKey = e.target.value;
+      state.displayLimit = 60;
       render();
     });
 
