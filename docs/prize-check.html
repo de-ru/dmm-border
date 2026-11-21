@@ -1,0 +1,457 @@
+
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json"></script>
+<div id="rate-preset-app">
+    <style>
+        #rate-preset-app {
+            font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 14px
+        }
+
+        #rate-preset-app * {
+            box-sizing: border-box
+        }
+
+        #rate-preset-app .wrap {
+            max-width: 440px;
+            margin: auto
+        }
+
+        #rate-preset-app h1 {
+            font-size: 24px;
+            margin: 4px 0
+        }
+
+        #rate-preset-app .sub,
+        #rate-preset-app .hint {
+            font-size: 12px;
+            line-height: 1.6;
+            color: #64748b
+        }
+
+        #rate-preset-app .card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            padding: 16px;
+            margin-top: 12px;
+            box-shadow: 0 7px 22px rgba(15, 23, 42, .06)
+        }
+
+        #rate-preset-app .tabs {
+            display: flex;
+            gap: 5px;
+            background: #f1f5f9;
+            border-radius: 14px;
+            padding: 4px
+        }
+
+        #rate-preset-app button {
+            font: inherit;
+            cursor: pointer
+        }
+
+        #rate-preset-app .tab {
+            flex: 1;
+            border: 0;
+            border-radius: 10px;
+            padding: 11px;
+            background: transparent;
+            color: #64748b;
+            font-weight: 900
+        }
+
+        #rate-preset-app .tab.active {
+            background: #0f172a;
+            color: #fff
+        }
+
+        #rate-preset-app .title {
+            display: block;
+            font-size: 13px;
+            font-weight: 900;
+            margin: 15px 0 7px
+        }
+
+        #rate-preset-app .chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px
+        }
+
+        #rate-preset-app .chip {
+            border: 1px solid #cbd5e1;
+            border-radius: 999px;
+            background: #fff;
+            color: #334155;
+            padding: 9px 13px;
+            font-size: 13px;
+            font-weight: 800
+        }
+
+        #rate-preset-app .chip.active {
+            border-color: #2563eb;
+            background: #eff6ff;
+            color: #1d4ed8
+        }
+
+        #rate-preset-app .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        #rate-preset-app label {
+            display: block;
+            font-size: 13px;
+            font-weight: 800;
+            margin-bottom: 6px
+        }
+
+        #rate-preset-app .input {
+            position: relative
+        }
+
+        #rate-preset-app input {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            background: #fff;
+            color: #0f172a;
+            padding: 12px 47px 12px 12px;
+            font-size: 16px;
+            font-weight: 800;
+            outline: none
+        }
+
+        #rate-preset-app input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .14)
+        }
+
+        #rate-preset-app .suffix {
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            font-weight: 800;
+            color: #64748b;
+            pointer-events: none
+        }
+
+        #rate-preset-app .hero {
+            background: linear-gradient(135deg, #0f172a, #1e3a8a);
+            color: #fff;
+            border-radius: 16px;
+            padding: 17px
+        }
+
+        #rate-preset-app .profit {
+            font-size: 35px;
+            font-weight: 950;
+            margin-top: 3px
+        }
+
+        #rate-preset-app .results {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 9px
+        }
+
+        #rate-preset-app .result {
+            background: #f1f5f9;
+            border-radius: 12px;
+            padding: 12px
+        }
+
+        #rate-preset-app .result small {
+            display: block;
+            color: #64748b;
+            font-weight: 800
+        }
+
+        #rate-preset-app .result strong {
+            display: block;
+            font-size: 20px;
+            margin-top: 4px
+        }
+
+        #rate-preset-app .details {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 10px 12px;
+            margin-top: 9px;
+            font-size: 13px
+        }
+
+        #rate-preset-app .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 5px 0
+        }
+
+        #rate-preset-app .row span {
+            color: #64748b
+        }
+
+        #rate-preset-app .error {
+            background: #fef2f2;
+            color: #b91c1c;
+            border-radius: 10px;
+            padding: 10px;
+            margin-top: 9px;
+            font-size: 13px;
+            font-weight: 800
+        }
+
+        #rate-preset-app .hidden {
+            display: none
+        }
+
+        @media(max-width:360px) {
+            #rate-preset-app .grid {
+                grid-template-columns: 1fr
+            }
+        }
+
+        @media(prefers-color-scheme:dark) {
+            #rate-preset-app {
+                background: #020617;
+                color: #e2e8f0
+            }
+
+            #rate-preset-app .card {
+                background: #0f172a;
+                border-color: #334155;
+                box-shadow: none
+            }
+
+            #rate-preset-app .tabs,
+            #rate-preset-app .result,
+            #rate-preset-app .details {
+                background: #1e293b
+            }
+
+            #rate-preset-app input,
+            #rate-preset-app .chip {
+                background: #111827;
+                border-color: #475569;
+                color: #f8fafc
+            }
+
+            #rate-preset-app .chip.active {
+                background: #172554;
+                border-color: #60a5fa;
+                color: #bfdbfe
+            }
+        }
+    </style>
+    <main class="wrap">
+        <header>
+            <div style="font-size:12px;font-weight:900;color:#2563eb;letter-spacing:.12em">PACHINKO / SLOT</div>
+            <h1>あまり玉・収支計算</h1>
+            <p class="sub">貸出数と1,000円単位の交換率から、景品交換額・収支・あまり玉を計算します。</p>
+        </header>
+        <section class="card">
+            <div class="tabs"><button type="button" class="tab active" data-mode="p">パチンコ</button><button type="button" class="tab" data-mode="s">スロット</button></div><span class="title">貸出枚数・貸出玉数</span>
+            <div id="lendChips" class="chips"></div><span class="title">交換率プリセット</span>
+            <div id="exchangeChips" class="chips"></div>
+            <div class="grid" style="margin-top:15px">
+                <div><label for="lend">1,000円あたりの貸出数</label>
+                    <div class="input"><input id="lend" type="number" inputmode="decimal" min="0.01" step="0.01"><span class="suffix unit">玉</span></div>
+                </div>
+                <div><label for="exchange">1,000円の交換に必要な数</label>
+                    <div class="input"><input id="exchange" type="number" inputmode="decimal" min="0.01" step="0.01"><span class="suffix unit">玉</span></div>
+                </div>
+            </div>
+            <p id="example" class="hint"></p>
+        </section>
+        <section class="card">
+            <div class="grid">
+                <div><label id="heldLabel" for="held">獲得玉数</label>
+                    <div class="input"><input id="held" type="number" inputmode="numeric" min="0" step="1" value="5000"><span class="suffix unit">玉</span></div>
+                </div>
+                <div><label for="invest">投資金額</label>
+                    <div class="input"><input id="invest" type="number" inputmode="numeric" min="0" step="100" value="10000"><span class="suffix">円</span></div>
+                </div>
+            </div>
+            <div style="margin-top:13px"><label for="prize">景品交換の最小金額</label>
+                <div class="input"><input id="prize" type="number" inputmode="numeric" min="100" step="100" value="1000"><span class="suffix">円</span></div>
+            </div>
+        </section>
+        <section class="card" aria-live="polite">
+            <div class="hero">
+                <div style="font-size:12px;font-weight:800;color:#bfdbfe">交換後の収支</div>
+                <div id="profit" class="profit">0円</div>
+                <div id="profitNote" style="font-size:13px;color:#dbeafe"></div>
+            </div>
+            <div class="results">
+                <div class="result"><small>景品交換額</small><strong id="cash">0円</strong></div>
+                <div class="result"><small id="remTitle">あまり玉</small><strong id="remain">0玉</strong></div>
+            </div>
+            <div class="details">
+                <div class="row"><span>端数込み交換価値</span><strong id="raw">0円</strong></div>
+                <div class="row"><span>投入相当数</span><strong id="borrowed">0玉</strong></div>
+                <div class="row"><span>貸出単価</span><strong id="lendRate">0円／玉</strong></div>
+                <div class="row"><span>交換単価</span><strong id="exRate">0円／玉</strong></div>
+            </div>
+            <div id="error" class="error hidden"></div>
+        </section>
+        <p class="hint" style="text-align:center;padding:4px 8px 16px">実際の交換条件や景品構成は店舗ごとにご確認ください。</p>
+    </main>
+    <script>
+        (() => {
+            const root = document.getElementById('rate-preset-app');
+            const $ = s => root.querySelector(s);
+            const $$ = s => [...root.querySelectorAll(s)];
+            const cfg = {
+                p: {
+                    unit: '玉',
+                    held: '獲得玉数',
+                    rem: 'あまり玉',
+                    example: '例：28玉交換は、1,000円の交換に280玉必要です。手動では任意の数値を入力できます。',
+                    lend: [
+                        ['4パチ', 250],
+                        ['2パチ', 500],
+                        ['1パチ', 1000],
+                        ['0.5パチ', 2000],
+                        ['手動', null]
+                    ],
+                    exchange: [
+                        ['等価', 250],
+                        ['27.5玉', 275],
+                        ['28玉', 280],
+                        ['30玉', 300],
+                        ['手動', null]
+                    ]
+                },
+                s: {
+                    unit: '枚',
+                    held: '獲得枚数',
+                    rem: 'あまりメダル',
+                    example: '例：5.1枚交換は51枚、5.5枚交換は55枚です。手動では任意の数値を入力できます。',
+                    lend: [
+                        ['46枚', 46],
+                        ['50枚', 50],
+                        ['手動', null]
+                    ],
+                    exchange: [
+                        ['等価', 50],
+                        ['5.1枚', 51],
+                        ['5.2枚', 52],
+                        ['5.5枚', 55],
+                        ['手動', null]
+                    ]
+                }
+            };
+            let mode = 'p';
+            const number = s => Number($(s).value);
+            const yen = v => Math.round(v).toLocaleString('ja-JP') + '円';
+            const qty = (v, u) => v.toLocaleString('ja-JP', {
+                maximumFractionDigits: 2
+            }) + u;
+
+            function renderChips(id, list, input) {
+                const box = $(id);
+                box.textContent = '';
+                list.forEach(item => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'chip';
+                    b.textContent = item[0];
+                    b.dataset.value = item[1] === null ? 'manual' : String(item[1]);
+                    b.addEventListener('click', () => {
+                        if (item[1] === null) {
+                            syncChips(id, input, list);
+                            $(input).focus();
+                            $(input).select()
+                        } else {
+                            $(input).value = item[1];
+                            syncChips(id, input, list);
+                            calc()
+                        }
+                    });
+                    box.appendChild(b)
+                });
+                syncChips(id, input, list)
+            }
+
+            function syncChips(id, input, list) {
+                const value = number(input);
+                const hasPreset = list.some(x => x[1] !== null && x[1] === value);
+                $$(`${id} .chip`).forEach((chip, i) => {
+                    const preset = list[i][1];
+                    chip.classList.toggle('active', preset === null ? !hasPreset : preset === value)
+                })
+            }
+
+            function setMode(next) {
+                mode = next;
+                const c = cfg[mode];
+                $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+                $$('.unit').forEach(x => x.textContent = c.unit);
+                $('#heldLabel').textContent = c.held;
+                $('#remTitle').textContent = c.rem;
+                $('#example').textContent = c.example;
+                $('#lend').value = c.lend[0][1];
+                $('#exchange').value = c.exchange[0][1];
+                renderChips('#lendChips', c.lend, '#lend');
+                renderChips('#exchangeChips', c.exchange, '#exchange');
+                calc()
+            }
+
+            function calc() {
+                const lend = number('#lend'),
+                    ex = number('#exchange'),
+                    held = number('#held'),
+                    invest = number('#invest'),
+                    prize = number('#prize');
+                if (![lend, ex, held, invest, prize].every(Number.isFinite) || lend <= 0 || ex <= 0 || held < 0 || invest < 0 || prize <= 0) {
+                    $('#error').textContent = '貸出数・交換数・景品額は0より大きい値、獲得数・投資額は0以上で入力してください。';
+                    $('#error').classList.remove('hidden');
+                    return
+                }
+                $('#error').classList.add('hidden');
+                const unit = cfg[mode].unit;
+                const raw = held / ex * 1000;
+                const cash = Math.floor((raw + 1e-9) / prize) * prize;
+                const used = cash / 1000 * ex;
+                const remain = Math.max(0, held - used);
+                const profit = cash - invest;
+                $('#cash').textContent = yen(cash);
+                $('#raw').textContent = yen(raw);
+                $('#remain').textContent = qty(remain, unit);
+                $('#borrowed').textContent = qty(invest / 1000 * lend, unit);
+                $('#lendRate').textContent = (1000 / lend).toLocaleString('ja-JP', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + '円／' + unit;
+                $('#exRate').textContent = (1000 / ex).toLocaleString('ja-JP', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + '円／' + unit;
+                $('#profit').textContent = (profit > 0 ? '+' : '') + yen(profit);
+                $('#profit').style.color = profit > 0 ? '#86efac' : profit < 0 ? '#fca5a5' : '#fff';
+                $('#profitNote').textContent = '投資 ' + yen(invest) + 'を差し引いた結果'
+            }
+            $$('.tab').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+            $('#lend').addEventListener('input', () => {
+                syncChips('#lendChips', '#lend', cfg[mode].lend);
+                calc()
+            });
+            $('#exchange').addEventListener('input', () => {
+                syncChips('#exchangeChips', '#exchange', cfg[mode].exchange);
+                calc()
+            });
+            ['#held', '#invest', '#prize'].forEach(id => $(id).addEventListener('input', calc));
+            setMode('p')
+        })()
+    </script>
+</div>
