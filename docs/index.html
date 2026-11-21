@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="パチンコ機種のボーダー一覧検索・カスタム交換率・持ち玉比率計算ができるWebツール。機種詳細ページへのダイレクト遷移対応。">
+  <title>ボーダーナビ - パチンコ機種検索＆カスタム交換率計算</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎯</text></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- ヘッダー -->
+    <header class="app-header">
+      <div class="header-main">
+        <div class="logo-area">
+          <span class="logo-icon">🎯</span>
+          <div>
+            <h1 class="app-title">ボーダーナビ</h1>
+            <p class="app-subtitle">ボーダー検索 & カスタム交換率計算ツール</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="themeToggle" class="btn-icon" title="テーマ切り替え" aria-label="テーマ切り替え">
+            <span class="theme-icon">🌙</span>
+          </button>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="dataTimestamp" class="data-badge">データ読み込み中...</span>
+        <span id="itemCount" class="data-badge">0 件</span>
+      </div>
+    </header>
+
+    <!-- 交換率・カスタム計算パネル -->
+    <section class="calc-panel card">
+      <div class="panel-header" id="calcHeader">
+        <div class="panel-title">
+          <span class="panel-icon">⚙️</span>
+          <h2>交換率・持ち玉比率 計算設定</h2>
+        </div>
+        <div class="current-setting-pill" id="currentSettingSummary">
+          28玉 (3.57円) / 持ち玉 70%
+        </div>
+      </div>
+
+      <div class="panel-body" id="calcBody">
+        <div class="calc-grid">
+          <!-- 交換率（換金率）選択 -->
+          <div class="calc-field">
+            <label for="ratePreset" class="field-label">
+              <span>交換率（換金率）</span>
+            </label>
+            <div class="select-wrapper">
+              <select id="ratePreset" class="form-select">
+                <option value="4.00">等価交換 (25.0玉 / 4.00円)</option>
+                <option value="3.57" selected>28.0玉交換 (3.57円)</option>
+                <option value="3.33">30.0玉交換 (3.33円)</option>
+                <option value="3.03">33.0玉交換 (3.03円)</option>
+                <option value="2.85">35.0玉交換 (2.85円)</option>
+                <option value="2.50">40.0玉交換 (2.50円)</option>
+                <option value="custom">カスタム（直接指定）</option>
+              </select>
+            </div>
+
+            <!-- カスタム入力欄（非表示切替） -->
+            <div id="customRateGroup" class="custom-rate-group hidden">
+              <div class="input-inline">
+                <div class="input-with-unit">
+                  <input type="number" id="customBalls" min="20" max="60" step="0.1" placeholder="28.0" class="form-input">
+                  <span class="unit">玉交換</span>
+                </div>
+                <span class="or-separator">または</span>
+                <div class="input-with-unit">
+                  <input type="number" id="customYen" min="1.0" max="5.0" step="0.01" placeholder="3.57" class="form-input">
+                  <span class="unit">円/玉</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 貸玉・遊技レート -->
+          <div class="calc-field">
+            <label class="field-label">玉貸料レート</label>
+            <div class="segmented-control" id="rentalSegment">
+              <button type="button" class="segment-btn active" data-rental="4">4円パチンコ (250玉/千円)</button>
+              <button type="button" class="segment-btn" data-rental="1">1円パチンコ (1000玉/千円)</button>
+            </div>
+          </div>
+
+          <!-- 持ち玉比率スライダー -->
+          <div class="calc-field full-width">
+            <div class="slider-header">
+              <label for="holdRatioSlider" class="field-label">持ち玉比率</label>
+              <span class="slider-val" id="holdRatioValue">70%</span>
+            </div>
+            <input type="range" id="holdRatioSlider" min="0" max="100" step="5" value="70" class="form-range">
+            <div class="ratio-presets">
+              <button type="button" class="preset-pill" data-ratio="0">0% (現金投資)</button>
+              <button type="button" class="preset-pill" data-ratio="50">50% (夕方勝負)</button>
+              <button type="button" class="preset-pill active" data-ratio="70">70% (通常標準)</button>
+              <button type="button" class="preset-pill" data-ratio="100">100% (終日持ち玉)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="calc-formula-note">
+          <small>※ 計算式: 合成ボーダー = 等価ボーダー ÷ [ 持ち玉比率 + (1 - 持ち玉比率) × (交換率 ÷ 4.00) ]</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- 検索 & フィルターバー -->
+    <section class="filter-section">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="機種名・メーカー・スペックを検索..." class="search-input" autocomplete="off">
+        <button id="clearSearchBtn" class="clear-btn hidden" title="検索クリア">✕</button>
+      </div>
+
+      <div class="filters-row">
+        <!-- カテゴリフィルター -->
+        <div class="filter-group">
+          <button class="filter-chip active" data-filter-type="category" data-val="all">すべて</button>
+          <button class="filter-chip" data-filter-type="category" data-val="P機">P機</button>
+          <button class="filter-chip" data-filter-type="category" data-val="e機">e機(スマパチ)</button>
+          <button class="filter-chip" data-filter-type="category" data-val="羽根モノ">羽根モノ</button>
+          <button class="filter-chip" data-filter-type="fav" data-val="fav">★ お気に入り</button>
+        </div>
+
+        <!-- ソートと表示形式 -->
+        <div class="view-controls">
+          <select id="sortSelect" class="form-select compact">
+            <option value="border_asc">ボーダーが甘い順</option>
+            <option value="border_desc">ボーダーが辛い順</option>
+            <option value="release_desc">導入日が新しい順</option>
+            <option value="name_asc">機種名順 (50音)</option>
+          </select>
+
+          <div class="segmented-control compact" id="viewMode">
+            <button type="button" class="segment-btn active" data-view="card" title="カード表示">📇</button>
+            <button type="button" class="segment-btn" data-view="table" title="テーブル表示">📋</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- メインコンテンツ（一覧表示） -->
+    <main class="main-content">
+      <!-- カードビュー -->
+      <div id="cardContainer" class="card-grid"></div>
+
+      <!-- テーブルビュー -->
+      <div id="tableContainer" class="table-responsive hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th class="th-fav">★</th>
+              <th class="th-name">機種名 / メーカー</th>
+              <th class="th-spec">種別 / スペック</th>
+              <th class="th-calc-border">計算ボーダー</th>
+              <th class="th-equal-border">等価ボーダー</th>
+              <th class="th-date">導入日</th>
+              <th class="th-action">詳細</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 0件表示 / エラーメッセージ -->
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-icon">🔎</div>
+        <h3>該当する機種が見つかりませんでした</h3>
+        <p>検索キーワードやフィルター条件を変更してお試しください。</p>
+        <button id="resetFilterBtn" class="btn-primary">条件をリセット</button>
+      </div>
+    </main>
+
+    <!-- クイック期待値計算モーダル -->
+    <div id="simModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="modalMachineName" class="modal-title">機種名</h3>
+          <button id="closeModalBtn" class="btn-close" aria-label="閉じる">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="sim-spec-info" id="modalSpecInfo"></div>
+          
+          <div class="sim-border-box">
+            <div class="sim-item">
+              <span class="sim-label">現在の設定ボーダー</span>
+              <span class="sim-val highlight" id="modalTargetBorder">--.-</span>
+              <span class="sim-unit">回/千円</span>
+            </div>
+            <div class="sim-item">
+              <span class="sim-label">等価ボーダー</span>
+              <span class="sim-val" id="modalEqualBorder">--.-</span>
+              <span class="sim-unit">回/千円</span>
+            </div>
+          </div>
+
+          <div class="sim-input-section">
+            <label for="actualRotationInput" class="field-label">実測の千円スタート回転数</label>
+            <div class="input-with-unit large">
+              <input type="number" id="actualRotationInput" step="0.5" placeholder="例: 19.5" class="form-input">
+              <span class="unit">回/千円</span>
+            </div>
+          </div>
+
+          <div class="sim-result-card" id="simResultCard">
+            <div class="sim-diff-row">
+              <span>ボーダーとの回転数差:</span>
+              <strong id="simDiffVal" class="diff-val">--</strong>
+            </div>
+            <div class="sim-eval-desc" id="simEvalDesc">
+              実測の回転数を入力すると、ボーダーに対する期待値水準を判定します。
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <a id="modalDetailLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-primary full-width">
+              機種の詳細・解析情報を見る ↗
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="app-footer">
+      <p>※ ボーダー数値は出玉増減なし・標準的な削りなしを想定した参考値です。実際のホール状況・止め打ち精度により変動します。</p>
+      <p>データ更新: GitHub Actions 自動収集 (毎週日曜更新) | <a href="https://github.com" target="_blank" rel="noopener noreferrer">GitHub Repository</a></p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
