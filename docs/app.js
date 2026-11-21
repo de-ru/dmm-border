@@ -7,8 +7,23 @@
   'use strict';
 
   // ==========================================================================
-  // アプリケーション状態 (State)
+  // 定数定義 & アプリケーション状態 (State)
   // ==========================================================================
+  const RATE_PRESETS = {
+    4: [
+      { value: '25', label: '25.0玉交換 (等価 / 4.00円)', balls: 25.0, yen: 4.00 },
+      { value: '27.5', label: '27.5玉交換 (3.64円)', balls: 27.5, yen: 3.636 },
+      { value: '28', label: '28.0玉交換 (3.57円)', balls: 28.0, yen: 3.571 },
+      { value: 'custom', label: 'カスタム（直接指定）' }
+    ],
+    1: [
+      { value: '100', label: '100.0玉交換 (等価 / 1.00円)', balls: 100.0, yen: 1.00 },
+      { value: '110', label: '110.0玉交換 (0.91円)', balls: 110.0, yen: 0.909 },
+      { value: '112', label: '112.0玉交換 (0.89円)', balls: 112.0, yen: 0.893 },
+      { value: 'custom', label: 'カスタム（直接指定）' }
+    ]
+  };
+
   const state = {
     machines: [],
     favorites: new Set(),
@@ -18,12 +33,13 @@
     onlyFavorites: false,
     sortKey: 'border_asc',
     viewMode: 'card',
-    // 交換率設定
-    ratePreset: '3.57',
-    customRateYen: 3.57,
+    // 交換率設定 (初期値: 4パチ 28玉交換)
+    ratePreset: '28',
+    customBalls: 28.0,
+    customYen: 3.57,
     holdRatio: 70, // 0 - 100 %
     rentalRate: 4, // 4 or 1 円パチンコ
-    // モーダル
+    // モーダル & 表示制限
     currentSimMachine: null,
     displayLimit: 60,
   };
@@ -77,6 +93,7 @@
   // ==========================================================================
   function init() {
     loadPreferences();
+    updateRatePresetOptions(state.rentalRate);
     setupEventListeners();
     fetchBordersData();
   }
@@ -161,56 +178,131 @@
   }
 
   // ==========================================================================
-  // 計算ロジック
+  // 計算ロジック & レート連動
   // ==========================================================================
 
   /**
-   * 現在選択中の交換率 (円/玉) を取得
+   * レートに応じた交換率セレクトボックスの選択肢を更新
    */
-  function getCurrentRateYen() {
-    if (state.ratePreset === 'custom') {
-      return state.customRateYen > 0 ? state.customRateYen : 3.57;
+  function updateRatePresetOptions(newRentalRate) {
+    const oldRental = state.rentalRate;
+    state.rentalRate = newRentalRate;
+
+    // 選択値の自動変換 (4円 ⇔ 1円)
+    if (oldRental !== newRentalRate) {
+      if (state.ratePreset !== 'custom') {
+        if (newRentalRate === 1) {
+          // 4円から1円へ (4倍)
+          if (state.ratePreset === '25') state.ratePreset = '100';
+          else if (state.ratePreset === '27.5') state.ratePreset = '110';
+          else if (state.ratePreset === '28') state.ratePreset = '112';
+          else state.ratePreset = '112';
+        } else {
+          // 1円から4円へ (1/4倍)
+          if (state.ratePreset === '100') state.ratePreset = '25';
+          else if (state.ratePreset === '110') state.ratePreset = '27.5';
+          else if (state.ratePreset === '112') state.ratePreset = '28';
+          else state.ratePreset = '28';
+        }
+      }
+
+      // カスタム入力欄の連動
+      if (newRentalRate === 1) {
+        if (els.customBalls) els.customBalls.placeholder = '112.0';
+        if (els.customYen) els.customYen.placeholder = '0.89';
+        state.customBalls = 112.0;
+        state.customYen = 0.89;
+      } else {
+        if (els.customBalls) els.customBalls.placeholder = '28.0';
+        if (els.customYen) els.customYen.placeholder = '3.57';
+        state.customBalls = 28.0;
+        state.customYen = 3.57;
+      }
+      if (els.customBalls && els.customBalls.value) els.customBalls.value = state.customBalls.toFixed(1);
+      if (els.customYen && els.customYen.value) els.customYen.value = state.customYen.toFixed(2);
     }
-    return parseFloat(state.ratePreset) || 3.57;
+
+    // セレクトボックスのオプション再構築
+    const options = RATE_PRESETS[newRentalRate] || RATE_PRESETS[4];
+    els.ratePreset.innerHTML = '';
+    options.forEach(opt => {
+      const optionEl = document.createElement('option');
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      if (opt.value === state.ratePreset) {
+        optionEl.selected = true;
+      }
+      els.ratePreset.appendChild(optionEl);
+    });
+
+    els.customRateGroup.classList.toggle('hidden', state.ratePreset !== 'custom');
+  }
+
+  /**
+   * 現在の交換率情報 (玉数, 1玉あたり円, 換金効率) を取得
+   */
+  function getCurrentRateInfo() {
+    const rental = state.rentalRate; // 4 or 1
+
+    let balls = rental === 1 ? 112.0 : 28.0;
+    let yenPerBall = rental === 1 ? 0.893 : 3.571;
+
+    if (state.ratePreset === 'custom') {
+      balls = state.customBalls > 0 ? state.customBalls : (rental === 1 ? 112.0 : 28.0);
+      yenPerBall = state.customYen > 0 ? state.customYen : (100.0 / balls);
+    } else {
+      balls = parseFloat(state.ratePreset);
+      yenPerBall = 100.0 / balls;
+    }
+
+    return {
+      balls: balls,
+      yen: yenPerBall,
+      efficiency: (rental === 1 ? 100.0 : 25.0) / balls
+    };
   }
 
   /**
    * 等価ボーダーから現在の設定に応じた合成ボーダーを計算
-   * @param {number} equalBorder - 等価ボーダー (回/千円)
+   * @param {number} equalBorder - 4円等価ボーダー (回/千円)
    * @returns {number} 計算後のボーダー (回/千円)
    */
   function calculateBorder(equalBorder) {
     if (!equalBorder || isNaN(equalBorder)) return 0;
 
-    const rateYen = getCurrentRateYen();
+    const rateInfo = getCurrentRateInfo();
     const holdRatio = state.holdRatio / 100; // 0.0 - 1.0
 
-    // 換金率係数 (等価4.0円に対する換金率比)
-    const exchangeFactor = rateYen / 4.0;
+    // 合成換金効率: 持ち玉部分は等価(1.0)、現金部分は換金率比
+    const compositeEfficiency = holdRatio + (1.0 - holdRatio) * rateInfo.efficiency;
 
-    // 合成換金効率: 持ち玉部分は等価(係数1.0)、現金投資部分は (交換率 / 4.0)
-    const compositeEfficiency = holdRatio + (1.0 - holdRatio) * exchangeFactor;
-
-    // 4円等価時のボーダー回転数に対する合成ボーダー
-    let calculated = equalBorder / compositeEfficiency;
-
-    // 1円パチンコの場合 (千円で1000玉貸出 = 4円パチの4倍回転)
-    if (state.rentalRate === 1) {
-      calculated = calculated * 4.0;
-    }
+    // 千円あたりのボーダー回転数
+    let calculated = (equalBorder * (state.rentalRate === 1 ? 4.0 : 1.0)) / compositeEfficiency;
 
     return Math.round(calculated * 10) / 10;
   }
 
+  /**
+   * 特定の玉数での完全現金ボーダーを計算 (ミニテーブル用)
+   */
+  function calculateCashBorderForBalls(equalBorder, targetBalls) {
+    if (!equalBorder || isNaN(equalBorder)) return '-';
+    const baseBalls = state.rentalRate === 1 ? 100.0 : 25.0;
+    const efficiency = baseBalls / targetBalls;
+    const calculated = (equalBorder * (state.rentalRate === 1 ? 4.0 : 1.0)) / efficiency;
+    return (Math.round(calculated * 10) / 10).toFixed(1);
+  }
+
   // 現在の設定サマリー文字列を更新
   function updateSettingSummary() {
-    const rateYen = getCurrentRateYen();
-    const balls = Math.round((1000 / rateYen) * 10) / 10;
+    const rateInfo = getCurrentRateInfo();
     const rentalText = state.rentalRate === 1 ? '1パチ' : '4パチ';
+    const isEquivalent = (state.rentalRate === 4 && Math.abs(rateInfo.balls - 25.0) < 0.1) ||
+                         (state.rentalRate === 1 && Math.abs(rateInfo.balls - 100.0) < 0.1);
     
-    let rateText = `${balls}玉 (${rateYen.toFixed(2)}円)`;
-    if (Math.abs(rateYen - 4.0) < 0.01) {
-      rateText = '等価 (4.00円)';
+    let rateText = `${rateInfo.balls.toFixed(1)}玉 (${rateInfo.yen.toFixed(2)}円)`;
+    if (isEquivalent) {
+      rateText = `等価 (${rateInfo.balls.toFixed(0)}玉 / ${rateInfo.yen.toFixed(2)}円)`;
     }
 
     els.currentSettingSummary.textContent = `${rentalText} | ${rateText} / 持ち玉 ${state.holdRatio}%`;
@@ -307,9 +399,10 @@
     const fragment = document.createDocumentFragment();
 
     machines.forEach(machine => {
+      const baseEqual = (machine.border_equal || 0) * (state.rentalRate === 1 ? 4.0 : 1.0);
       const calcBorder = calculateBorder(machine.border_equal);
       const isFav = state.favorites.has(machine.id);
-      const diff = Math.round((calcBorder - machine.border_equal) * 10) / 10;
+      const diff = Math.round((calcBorder - baseEqual) * 10) / 10;
       const diffSign = diff > 0 ? `+${diff.toFixed(1)}` : (diff === 0 ? '±0.0' : diff.toFixed(1));
       const diffClass = diff > 0 ? 'plus' : 'even';
 
@@ -351,32 +444,24 @@
               </div>
             </div>
             <div class="border-sub-block">
-              <div>等価: <span class="equal-border-val">${(machine.border_equal || 0).toFixed(1)}</span></div>
+              <div>等価: <span class="equal-border-val">${baseEqual.toFixed(1)}</span></div>
               <span class="diff-badge ${diffClass}">${diffSign}</span>
             </div>
           </div>
 
-          <!-- 各換金率での目安ミニテーブル -->
+          <!-- 各換金率での目安ミニテーブル (25/27.5/28玉 または 100/110/112玉) -->
           <div class="rate-mini-table">
             <div class="rate-mini-item">
-              <span class="rate-lbl">等価</span>
-              <span class="rate-val">${machine.borders && machine.borders['4.00'] ? machine.borders['4.00'] : (machine.border_equal || '-')}</span>
+              <span class="rate-lbl">${state.rentalRate === 1 ? '100玉(等価)' : '25玉(等価)'}</span>
+              <span class="rate-val">${calculateCashBorderForBalls(machine.border_equal, state.rentalRate === 1 ? 100 : 25)}</span>
             </div>
             <div class="rate-mini-item">
-              <span class="rate-lbl">28玉</span>
-              <span class="rate-val">${machine.borders && machine.borders['3.57'] ? machine.borders['3.57'] : '-'}</span>
+              <span class="rate-lbl">${state.rentalRate === 1 ? '110玉' : '27.5玉'}</span>
+              <span class="rate-val">${calculateCashBorderForBalls(machine.border_equal, state.rentalRate === 1 ? 110 : 27.5)}</span>
             </div>
             <div class="rate-mini-item">
-              <span class="rate-lbl">30玉</span>
-              <span class="rate-val">${machine.borders && machine.borders['3.33'] ? machine.borders['3.33'] : '-'}</span>
-            </div>
-            <div class="rate-mini-item">
-              <span class="rate-lbl">33玉</span>
-              <span class="rate-val">${machine.borders && machine.borders['3.03'] ? machine.borders['3.03'] : '-'}</span>
-            </div>
-            <div class="rate-mini-item">
-              <span class="rate-lbl">40玉</span>
-              <span class="rate-val">${machine.borders && machine.borders['2.50'] ? machine.borders['2.50'] : '-'}</span>
+              <span class="rate-lbl">${state.rentalRate === 1 ? '112玉' : '28玉'}</span>
+              <span class="rate-val">${calculateCashBorderForBalls(machine.border_equal, state.rentalRate === 1 ? 112 : 28)}</span>
             </div>
           </div>
         </div>
@@ -435,7 +520,7 @@
         </td>
         <td>${escapeHtml(machine.type || '')}</td>
         <td><span class="calc-val">${calcBorder.toFixed(1)}</span> <small>回/千円</small></td>
-        <td>${(machine.border_equal || 0).toFixed(1)} <small>回</small></td>
+        <td>${((machine.border_equal || 0) * (state.rentalRate === 1 ? 4.0 : 1.0)).toFixed(1)} <small>回</small></td>
         <td>${escapeHtml(machine.release_date || '-')}</td>
         <td>
           <a href="${escapeHtml(machine.detail_url || '#')}" target="_blank" rel="noopener noreferrer" class="btn-detail" style="display:inline-block; padding:0.3rem 0.6rem;">
@@ -479,7 +564,8 @@
     els.modalMachineName.textContent = machine.name;
     els.modalSpecInfo.textContent = `${machine.maker} | ${machine.type}`;
     els.modalTargetBorder.textContent = targetBorder.toFixed(1);
-    els.modalEqualBorder.textContent = (machine.border_equal || 0).toFixed(1);
+    const equalVal = (machine.border_equal || 0) * (state.rentalRate === 1 ? 4.0 : 1.0);
+    els.modalEqualBorder.textContent = equalVal.toFixed(1);
     els.modalDetailLink.href = machine.detail_url || '#';
 
     els.actualRotationInput.value = '';
@@ -542,38 +628,45 @@
       state.ratePreset = e.target.value;
       if (state.ratePreset === 'custom') {
         els.customRateGroup.classList.remove('hidden');
+        if (!els.customBalls.value) {
+          els.customBalls.value = (state.rentalRate === 1 ? 112.0 : 28.0).toFixed(1);
+          els.customYen.value = (state.rentalRate === 1 ? 0.89 : 3.57).toFixed(2);
+        }
       } else {
         els.customRateGroup.classList.add('hidden');
       }
       render();
     });
 
-    // カスタム玉数入力
+    // カスタム玉数入力 (100円あたりの玉数)
     els.customBalls.addEventListener('input', (e) => {
       const balls = parseFloat(e.target.value);
       if (balls > 0) {
-        state.customRateYen = Math.round((1000 / balls) * 100) / 100;
-        els.customYen.value = state.customRateYen.toFixed(2);
+        state.customBalls = balls;
+        state.customYen = Math.round((100.0 / balls) * 100) / 100;
+        els.customYen.value = state.customYen.toFixed(2);
         render();
       }
     });
 
-    // カスタム円入力
+    // カスタム円入力 (1玉あたりの換金金額)
     els.customYen.addEventListener('input', (e) => {
       const yen = parseFloat(e.target.value);
       if (yen > 0) {
-        state.customRateYen = yen;
-        els.customBalls.value = (Math.round((1000 / yen) * 10) / 10).toFixed(1);
+        state.customYen = yen;
+        state.customBalls = Math.round((100.0 / yen) * 10) / 10;
+        els.customBalls.value = state.customBalls.toFixed(1);
         render();
       }
     });
 
-    // 貸玉レートセグメント
+    // 貸玉レートセグメント (4円 ⇔ 1円)
     els.rentalBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         els.rentalBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        state.rentalRate = parseInt(btn.dataset.rental, 10);
+        const rental = parseInt(btn.dataset.rental, 10);
+        updateRatePresetOptions(rental);
         render();
       });
     });
