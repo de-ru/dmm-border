@@ -583,6 +583,81 @@ body {
   color: var(--text-muted);
 }
 
+.tag-old {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px dashed #cbd5e1;
+}
+
+/* ランキングバッジ */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  line-height: 1.2;
+}
+
+.rank-1 {
+  background: linear-gradient(135deg, #ffd700, #f59e0b);
+  color: #78350f;
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.4);
+}
+
+.rank-2 {
+  background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+  color: #1e293b;
+}
+
+.rank-3 {
+  background: linear-gradient(135deg, #fed7aa, #d97706);
+  color: #451a03;
+}
+
+.rank-other {
+  background: var(--bg-card-sub);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+/* 過去機種トグル */
+.old-machine-toggle-box {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--text-sub);
+  user-select: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  transition: var(--transition);
+}
+
+.toggle-label:hover {
+  background: var(--bg-hover);
+}
+
+.toggle-checkbox {
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.td-rank {
+  text-align: center;
+  font-weight: 700;
+}
+
 .fav-star-btn {
   background: transparent;
   border: none;
