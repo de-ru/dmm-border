@@ -39,6 +39,9 @@
     customYen: 3.57,
     holdRatio: 70, // 0 - 100 %
     rentalRate: 4, // 4 or 1 円パチンコ
+    // 過去機種 & 発売年フィルター
+    includeOld: false, // 6年以上前の過去機種を含めるか (デフォルトOFF)
+    selectedYear: 'all', // 発売年フィルター
     // モーダル & 表示制限
     currentSimMachine: null,
     displayLimit: 60,
@@ -67,6 +70,8 @@
     searchInput: document.getElementById('searchInput'),
     clearSearchBtn: document.getElementById('clearSearchBtn'),
     filterChips: document.querySelectorAll('.filter-chip'),
+    includeOldCheckbox: document.getElementById('includeOldCheckbox'),
+    yearSelect: document.getElementById('yearSelect'),
     sortSelect: document.getElementById('sortSelect'),
     viewModeBtns: document.querySelectorAll('#viewMode .segment-btn'),
     // リストコンテナ
@@ -148,6 +153,7 @@
           if (Array.isArray(data) && data.length > 0) {
             state.machines = data;
             loaded = true;
+            populateYearOptions();
             updateDataMeta();
             render();
             break;
@@ -175,6 +181,61 @@
     } else {
       els.dataTimestamp.textContent = `データ読み込み完了`;
     }
+  }
+
+  /**
+   * 発売年セレクトボックスの選択肢をデータから動的に生成
+   */
+  function populateYearOptions() {
+    if (!els.yearSelect) return;
+    const yearsSet = new Set();
+    state.machines.forEach(m => {
+      if (m.release_date && typeof m.release_date === 'string') {
+        const y = m.release_date.substring(0, 4);
+        if (/^\d{4}$/.test(y)) {
+          yearsSet.add(y);
+        }
+      }
+    });
+
+    const sortedYears = Array.from(yearsSet).sort().reverse();
+    els.yearSelect.innerHTML = '<option value="all">発売年: すべて</option>';
+    sortedYears.forEach(y => {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = `${y}年`;
+      if (state.selectedYear === y) {
+        opt.selected = true;
+      }
+      els.yearSelect.appendChild(opt);
+    });
+  }
+
+  /**
+   * 導入日から6年以上経過した過去機種か判定
+   * 現在2026年基準: 6年前は2020年
+   */
+  function isOldMachine(machine) {
+    if (!machine) return false;
+    if (!machine.release_date) {
+      // CR機は確実に6年以上前の旧基準機
+      if (machine.name && machine.name.startsWith('CR')) return true;
+      return false;
+    }
+    const parts = machine.release_date.split('-');
+    const year = parseInt(parts[0], 10);
+    const month = parts.length > 1 ? parseInt(parts[1], 10) : 1;
+    if (isNaN(year)) return false;
+
+    // 現在日時の6年前
+    const now = new Date();
+    const thresholdYear = now.getFullYear() - 6;
+    const thresholdMonth = now.getMonth() + 1;
+
+    if (year < thresholdYear) return true;
+    if (year === thresholdYear && month <= thresholdMonth) return true;
+
+    return false;
   }
 
   // ==========================================================================
@@ -314,6 +375,11 @@
   function getFilteredAndSortedMachines() {
     let list = [...state.machines];
 
+    // 0. 過去機種フィルター (デフォルトは発売6年超の過去機種を除外)
+    if (!state.includeOld) {
+      list = list.filter(m => !isOldMachine(m));
+    }
+
     // 1. お気に入りフィルター
     if (state.onlyFavorites) {
       list = list.filter(m => state.favorites.has(m.id));
@@ -329,7 +395,12 @@
       });
     }
 
-    // 3. 検索キーワードフィルター
+    // 3. 発売年フィルター
+    if (state.selectedYear !== 'all') {
+      list = list.filter(m => m.release_date && m.release_date.startsWith(state.selectedYear));
+    }
+
+    // 4. 検索キーワードフィルター
     if (state.searchQuery.trim() !== '') {
       const q = state.searchQuery.toLowerCase().trim();
       list = list.filter(m => {
@@ -341,7 +412,7 @@
       });
     }
 
-    // 4. ソート
+    // 5. ソート (ボーダー甘い順 / 辛い順 / 導入日順 / 五十音順)
     list.sort((a, b) => {
       const calcA = calculateBorder(a.border_equal);
       const calcB = calculateBorder(b.border_equal);
@@ -353,6 +424,8 @@
           return calcB - calcA;
         case 'release_desc':
           return (b.release_date || '').localeCompare(a.release_date || '');
+        case 'release_asc':
+          return (a.release_date || '9999-99').localeCompare(b.release_date || '9999-99');
         case 'name_asc':
           return (a.name || '').localeCompare(b.name || '', 'ja');
         default:
@@ -397,14 +470,31 @@
   function renderCards(machines, totalCount) {
     els.cardContainer.innerHTML = '';
     const fragment = document.createDocumentFragment();
+    const isRanking = state.sortKey === 'border_asc';
 
-    machines.forEach(machine => {
+    machines.forEach((machine, index) => {
       const baseEqual = (machine.border_equal || 0) * (state.rentalRate === 1 ? 4.0 : 1.0);
       const calcBorder = calculateBorder(machine.border_equal);
       const isFav = state.favorites.has(machine.id);
       const diff = Math.round((calcBorder - baseEqual) * 10) / 10;
       const diffSign = diff > 0 ? `+${diff.toFixed(1)}` : (diff === 0 ? '±0.0' : diff.toFixed(1));
       const diffClass = diff > 0 ? 'plus' : 'even';
+
+      // ランキングバッジ判定 (ボーダー甘い順の時)
+      let rankBadgeHtml = '';
+      if (isRanking) {
+        const rank = index + 1;
+        let rankClass = 'rank-other';
+        let rankText = `${rank}位`;
+        if (rank === 1) { rankClass = 'rank-1'; rankText = '🥇 1位'; }
+        else if (rank === 2) { rankClass = 'rank-2'; rankText = '🥈 2位'; }
+        else if (rank === 3) { rankClass = 'rank-3'; rankText = '🥉 3位'; }
+        rankBadgeHtml = `<span class="rank-badge ${rankClass}">${rankText}</span>`;
+      }
+
+      // 過去機種判定 (6年超)
+      const isOld = isOldMachine(machine);
+      const oldBadgeHtml = isOld ? '<span class="tag-badge tag-old">⌛ 過去機種</span>' : '';
 
       // カテゴリタグ判定
       let tagClass = 'tag-p';
@@ -423,9 +513,11 @@
         <div>
           <div class="card-top">
             <div class="card-tags">
+              ${rankBadgeHtml}
               <span class="tag-badge ${tagClass}">${escapeHtml(tagText)}</span>
               <span class="tag-badge tag-maker">${escapeHtml(machine.maker || 'メーカー不明')}</span>
               ${machine.release_date ? `<span class="tag-badge tag-maker">${escapeHtml(machine.release_date)}導入</span>` : ''}
+              ${oldBadgeHtml}
             </div>
             <button class="fav-star-btn ${isFav ? 'is-fav' : ''}" data-id="${machine.id}" title="${isFav ? 'お気に入り解除' : 'お気に入り登録'}">
               ★
@@ -504,18 +596,33 @@
   function renderTable(machines, totalCount) {
     els.tableBody.innerHTML = '';
     const fragment = document.createDocumentFragment();
+    const isRanking = state.sortKey === 'border_asc';
 
-    machines.forEach(machine => {
+    machines.forEach((machine, index) => {
       const calcBorder = calculateBorder(machine.border_equal);
       const isFav = state.favorites.has(machine.id);
+      const isOld = isOldMachine(machine);
+
+      let rankCellHtml = '-';
+      if (isRanking) {
+        const rank = index + 1;
+        if (rank === 1) rankCellHtml = '🥇 1位';
+        else if (rank === 2) rankCellHtml = '🥈 2位';
+        else if (rank === 3) rankCellHtml = '🥉 3位';
+        else rankCellHtml = `${rank}位`;
+      }
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td class="td-rank">${rankCellHtml}</td>
         <td class="td-fav">
           <button class="fav-star-btn ${isFav ? 'is-fav' : ''}" data-id="${machine.id}">★</button>
         </td>
         <td>
-          <div style="font-weight: 700;">${escapeHtml(machine.name)}</div>
+          <div style="font-weight: 700;">
+            ${escapeHtml(machine.name)}
+            ${isOld ? '<span class="tag-badge tag-old" style="margin-left:0.3rem;">⌛ 過去機種</span>' : ''}
+          </div>
           <small style="color: var(--text-muted);">${escapeHtml(machine.maker || '')}</small>
         </td>
         <td>${escapeHtml(machine.type || '')}</td>
@@ -537,7 +644,7 @@
     if (machines.length < totalCount) {
       const moreTr = document.createElement('tr');
       moreTr.innerHTML = `
-        <td colspan="7" style="text-align: center; padding: 1.25rem;">
+        <td colspan="8" style="text-align: center; padding: 1.25rem;">
           <button id="loadMoreTableBtn" class="btn-primary" style="padding: 0.6rem 1.5rem;">
             さらに表示する (残り ${totalCount - machines.length} 件)
           </button>
@@ -743,6 +850,24 @@
       render();
     });
 
+    // 過去機種トグル (6年以上前の過去機種を表示に含めるか)
+    if (els.includeOldCheckbox) {
+      els.includeOldCheckbox.addEventListener('change', (e) => {
+        state.includeOld = e.target.checked;
+        state.displayLimit = 60;
+        render();
+      });
+    }
+
+    // 発売年フィルター
+    if (els.yearSelect) {
+      els.yearSelect.addEventListener('change', (e) => {
+        state.selectedYear = e.target.value;
+        state.displayLimit = 60;
+        render();
+      });
+    }
+
     // ビュー切り替え (カード / テーブル)
     els.viewModeBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -757,7 +882,12 @@
     els.resetFilterBtn.addEventListener('click', () => {
       state.searchQuery = '';
       state.selectedCategory = 'all';
+      state.selectedYear = 'all';
       state.onlyFavorites = false;
+      state.includeOld = false;
+      state.displayLimit = 60;
+      if (els.includeOldCheckbox) els.includeOldCheckbox.checked = false;
+      if (els.yearSelect) els.yearSelect.value = 'all';
       els.searchInput.value = '';
       els.clearSearchBtn.classList.add('hidden');
       els.filterChips.forEach(c => {
