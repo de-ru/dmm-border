@@ -125,12 +125,27 @@
           <button class="filter-chip" data-filter-type="fav" data-val="fav">★ お気に入り</button>
         </div>
 
-        <!-- ソートと表示形式 -->
+        <!-- 過去機種(6年以上前)の表示切り替えトグル -->
+        <div class="old-machine-toggle-box">
+          <label class="toggle-label" title="ホール導入から6年以上経過した過去機種・CR機を表示対象に含めるか切り替えます">
+            <input type="checkbox" id="includeOldCheckbox" class="toggle-checkbox">
+            <span class="toggle-text">過去の機種 (6年以上前) も含める</span>
+          </label>
+        </div>
+
+        <!-- 発売年フィルター & ソートと表示形式 -->
         <div class="view-controls">
+          <!-- 発売年ドロップダウン -->
+          <select id="yearSelect" class="form-select compact" title="発売年(導入年)で絞り込み">
+            <option value="all">発売年: すべて</option>
+          </select>
+
+          <!-- ソート -->
           <select id="sortSelect" class="form-select compact">
-            <option value="border_asc">ボーダーが甘い順</option>
-            <option value="border_desc">ボーダーが辛い順</option>
-            <option value="release_desc">導入日が新しい順</option>
+            <option value="border_asc">🏆 ボーダー甘い順 (ランキング)</option>
+            <option value="border_desc">ボーダー辛い順</option>
+            <option value="release_desc">📅 導入日新しい順</option>
+            <option value="release_asc">📅 導入日古い順</option>
             <option value="name_asc">機種名順 (50音)</option>
           </select>
 
@@ -152,6 +167,7 @@
         <table class="data-table">
           <thead>
             <tr>
+              <th class="th-rank">順位</th>
               <th class="th-fav">★</th>
               <th class="th-name">機種名 / メーカー</th>
               <th class="th-spec">種別 / スペック</th>
