@@ -1,0 +1,56 @@
+name: Update Borders Data
+
+on:
+  schedule:
+    # 毎週日曜日 JST 午前6:00（UTC 土曜日 21:00）に自動実行
+    # ※ JSTはUTC+9時間のため、JST日曜06:00 = UTC土曜21:00 となります。
+    # ※ もしJST日曜09:00にしたい場合は '0 0 * * 0' (UTC日曜00:00) を指定します。
+    - cron: '0 21 * * 6'
+  # GitHub Web画面からいつでも手動実行（テスト実行）可能
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f scripts/requirements.txt ]; then
+            pip install -r scripts/requirements.txt
+          fi
+
+      - name: Run scraper script
+        run: |
+          python scripts/scrape.py
+
+      - name: Commit and push changes
+        run: |
+          # 差分チェック: 変更がない場合は正常終了してスキップ
+          if git diff --quiet data/borders.json docs/data/borders.json; then
+            echo "ボーダーデータに変更はありませんでした。コミットとプッシュをスキップします。"
+            exit 0
+          fi
+
+          echo "ボーダーデータの更新差分を検出しました。コミット＆プッシュを実行します。"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add data/borders.json docs/data/borders.json
+          git commit -m "chore(data): auto-update borders.json [skip ci] ($(date +'%Y-%m-%d'))"
+          git push origin HEAD:${{ github.ref }}
