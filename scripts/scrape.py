@@ -23,6 +23,12 @@ DMMぱちタウン (p-town.dmm.com) ボーダーデータ取得スクリプト
 - 取得件数0件またはエラー発生時、既存の data/borders.json を絶対に壊さないフェイルセーフ
 - 一時ファイル経由のアトミック書き込み
 - docs/data/borders.json との自動同期
+【403 Forbidden 対策・堅牢化設計】
+1. requests.Session() による Cookie とセッションの完全維持
+2. page=1 のリダイレクト (301) 回避: page=1 はパラメータなしの正規化URLへアクセス
+3. urllib フォールバック時も CookieJar + ヘッダー維持型リダイレクトハンドラを適用
+4. 親ページ (https://p-town.dmm.com/machine_borders) への初期アクセスで Laravel Cookie 取得
+5. Sec-Ch-Ua, Sec-Fetch-*, X-Requested-With 等の完全ブラウザヘッダー送信
 --------------------------------------------------------------------------
 """
 
@@ -32,11 +38,18 @@ import json
 import time
 import re
 import argparse
+import http.cookiejar
 import urllib.request
 import urllib.error
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple, Union
+
+# requests があれば優先使用
+try:
+    import requests
+except ImportError:
+    requests = None
 
 # パス設定
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,12 +58,92 @@ DOCS_DATA_PATH = BASE_DIR / "docs" / "data" / "borders.json"
 BACKUP_PATH = BASE_DIR / "data" / "borders.backup.json"
 
 # APIエンドポイント
+# エンドポイント
+TOP_PAGE_URL = "https://p-town.dmm.com/machine_borders"
 API_BASE_URL = "https://p-town.dmm.com/ajax/machines/borders"
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
+
+# ブラウザ完全擬態ヘッダー
+COMMON_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": "https://p-town.dmm.com/machine_borders",
+}
+
+
+class HeaderPreservingRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """301/302 リダイレクト時にもカスタムヘッダーを保持するハンドラ"""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req:
+            for k, v in COMMON_HEADERS.items():
+                new_req.add_header(k, v)
+        return new_req
+
+
+class P舍Client:
+    """セッションCookieとヘッダーを維持して通信を行うクライアント"""
+
+    def __init__(self):
+        self.use_requests = requests is not None
+        if self.use_requests:
+            self.session = requests.Session()
+            self.session.headers.update(COMMON_HEADERS)
+        else:
+            self.cookie_jar = http.cookiejar.CookieJar()
+            self.opener = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(self.cookie_jar),
+                HeaderPreservingRedirectHandler(),
+            )
+
+    def init_session(self):
+        """トップページを訪問してセッションCookie（XSRF-TOKEN / laravel_session）を確立"""
+        print(f"[INFO] セッションCookieを初期化中... ({TOP_PAGE_URL})")
+        top_headers = dict(COMMON_HEADERS)
+        top_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        top_headers["Sec-Fetch-Dest"] = "document"
+        top_headers["Sec-Fetch-Mode"] = "navigate"
+        top_headers["Sec-Fetch-Site"] = "none"
+
+        try:
+            if self.use_requests:
+                resp = self.session.get(TOP_PAGE_URL, headers=top_headers, timeout=15)
+                resp.raise_for_status()
+            else:
+                req = urllib.request.Request(TOP_PAGE_URL, headers=top_headers)
+                with self.opener.open(req, timeout=15) as resp:
+                    resp.read()
+            print("[INFO] セッションCookieの初期化に成功しました。")
+        except Exception as e:
+            print(f"[WARN] セッションCookie初期化時に警告 (処理は続行します): {e}", file=sys.stderr)
+
+    def get_json(self, url: str) -> Dict[str, Any]:
+        """指定URLからJSONを取得"""
+        if self.use_requests:
+            resp = self.session.get(url, timeout=15)
+            resp.raise_for_status()
+            return resp.json()
+        else:
+            req = urllib.request.Request(url, headers=COMMON_HEADERS)
+            with self.opener.open(req, timeout=15) as resp:
+                content = resp.read().decode("utf-8")
+                return json.loads(content)
 
 
 def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Optional[float], Dict[str, float]]:
@@ -59,6 +152,7 @@ def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Opti
     Returns:
         (border_val, border_equal, borders_dict)
     """
+    """ボーダーテキストから基準ボーダー値 (等価4.0円または設定1) を抽出"""
     if not raw_text or not isinstance(raw_text, str):
         return ("情報なし", None, {})
 
@@ -138,6 +232,7 @@ def parse_border_value(raw_text: Optional[str]) -> Tuple[Union[float, str], Opti
 
 def determine_category_and_type(name: str, desc: str) -> Tuple[str, str]:
     """機種名や説明文からカテゴリ(e機/P機/羽根モノ)とスペック種別を判定"""
+    """機種名や説明文からカテゴリとスペック種別を判定"""
     category = "P機"
     spec_type = "パチンコ"
 
@@ -250,6 +345,9 @@ def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, 
     if existing_data and not dry_run:
         create_backup(existing_data)
 
+    client = P舍Client()
+    client.init_session()
+
     collected_items: List[Dict[str, Any]] = []
     seen_ids = set()
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -265,6 +363,14 @@ def scrape_borders(max_pages: Optional[int] = None, delay_seconds: float = 2.0, 
 
             print(f"[INFO] ページ {page} を取得中... ({API_BASE_URL}?page={page})")
             data = fetch_page(page)
+            # 301 リダイレクト回避: page=1 の場合はクエリなしの正規化URLを使用
+            if page == 1:
+                target_url = API_BASE_URL
+            else:
+                target_url = f"{API_BASE_URL}?page={page}"
+
+            print(f"[INFO] ページ {page} を取得中... ({target_url})")
+            data = client.get_json(target_url)
 
             items = data.get("data", [])
             total_pages = data.get("last_page", total_pages)
