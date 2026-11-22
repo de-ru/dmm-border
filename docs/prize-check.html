@@ -1,457 +1,643 @@
 
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json"></script>
-<div id="rate-preset-app">
-    <style>
-        #rate-preset-app {
-            font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif;
-            background: #f1f5f9;
-            color: #0f172a;
-            padding: 14px
-        }
+<!DOCTYPE html>
+<html lang="ja">
 
-        #rate-preset-app * {
-            box-sizing: border-box
-        }
-
-        #rate-preset-app .wrap {
-            max-width: 440px;
-            margin: auto
-        }
-
-        #rate-preset-app h1 {
-            font-size: 24px;
-            margin: 4px 0
-        }
-
-        #rate-preset-app .sub,
-        #rate-preset-app .hint {
-            font-size: 12px;
-            line-height: 1.6;
-            color: #64748b
-        }
-
-        #rate-preset-app .card {
-            background: #fff;
-            border: 1px solid #e2e8f0;
-            border-radius: 18px;
-            padding: 16px;
-            margin-top: 12px;
-            box-shadow: 0 7px 22px rgba(15, 23, 42, .06)
-        }
-
-        #rate-preset-app .tabs {
-            display: flex;
-            gap: 5px;
-            background: #f1f5f9;
-            border-radius: 14px;
-            padding: 4px
-        }
-
-        #rate-preset-app button {
-            font: inherit;
-            cursor: pointer
-        }
-
-        #rate-preset-app .tab {
-            flex: 1;
-            border: 0;
-            border-radius: 10px;
-            padding: 11px;
-            background: transparent;
-            color: #64748b;
-            font-weight: 900
-        }
-
-        #rate-preset-app .tab.active {
-            background: #0f172a;
-            color: #fff
-        }
-
-        #rate-preset-app .title {
-            display: block;
-            font-size: 13px;
-            font-weight: 900;
-            margin: 15px 0 7px
-        }
-
-        #rate-preset-app .chips {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 7px
-        }
-
-        #rate-preset-app .chip {
-            border: 1px solid #cbd5e1;
-            border-radius: 999px;
-            background: #fff;
-            color: #334155;
-            padding: 9px 13px;
-            font-size: 13px;
-            font-weight: 800
-        }
-
-        #rate-preset-app .chip.active {
-            border-color: #2563eb;
-            background: #eff6ff;
-            color: #1d4ed8
-        }
-
-        #rate-preset-app .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px
-        }
-
-        #rate-preset-app label {
-            display: block;
-            font-size: 13px;
-            font-weight: 800;
-            margin-bottom: 6px
-        }
-
-        #rate-preset-app .input {
-            position: relative
-        }
-
-        #rate-preset-app input {
-            width: 100%;
-            border: 1px solid #cbd5e1;
-            border-radius: 12px;
-            background: #fff;
-            color: #0f172a;
-            padding: 12px 47px 12px 12px;
-            font-size: 16px;
-            font-weight: 800;
-            outline: none
-        }
-
-        #rate-preset-app input:focus {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, .14)
-        }
-
-        #rate-preset-app .suffix {
-            position: absolute;
-            right: 13px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 12px;
-            font-weight: 800;
-            color: #64748b;
-            pointer-events: none
-        }
-
-        #rate-preset-app .hero {
-            background: linear-gradient(135deg, #0f172a, #1e3a8a);
-            color: #fff;
-            border-radius: 16px;
-            padding: 17px
-        }
-
-        #rate-preset-app .profit {
-            font-size: 35px;
-            font-weight: 950;
-            margin-top: 3px
-        }
-
-        #rate-preset-app .results {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 9px
-        }
-
-        #rate-preset-app .result {
-            background: #f1f5f9;
-            border-radius: 12px;
-            padding: 12px
-        }
-
-        #rate-preset-app .result small {
-            display: block;
-            color: #64748b;
-            font-weight: 800
-        }
-
-        #rate-preset-app .result strong {
-            display: block;
-            font-size: 20px;
-            margin-top: 4px
-        }
-
-        #rate-preset-app .details {
-            background: #f8fafc;
-            border-radius: 12px;
-            padding: 10px 12px;
-            margin-top: 9px;
-            font-size: 13px
-        }
-
-        #rate-preset-app .row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 5px 0
-        }
-
-        #rate-preset-app .row span {
-            color: #64748b
-        }
-
-        #rate-preset-app .error {
-            background: #fef2f2;
-            color: #b91c1c;
-            border-radius: 10px;
-            padding: 10px;
-            margin-top: 9px;
-            font-size: 13px;
-            font-weight: 800
-        }
-
-        #rate-preset-app .hidden {
-            display: none
-        }
-
-        @media(max-width:360px) {
-            #rate-preset-app .grid {
-                grid-template-columns: 1fr
-            }
-        }
-
-        @media(prefers-color-scheme:dark) {
-            #rate-preset-app {
-                background: #020617;
-                color: #e2e8f0
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="theme-color" content="#f1f5f9">
+        <meta name="color-scheme" content="light dark">
+        <title>あまり玉・収支計算</title>
+        <style>
+            :root {
+                --bg: #f1f5f9;
+                --panel: #fff;
+                --sub: #f8fafc;
+                --text: #0f172a;
+                --muted: #64748b;
+                --border: #d8e1ec;
+                --brand: #2563eb;
+                --soft: #eff6ff;
+                --shadow: 0 7px 22px rgba(15, 23, 42, .06)
             }
 
-            #rate-preset-app .card {
-                background: #0f172a;
-                border-color: #334155;
-                box-shadow: none
+            * {
+                box-sizing: border-box
             }
 
-            #rate-preset-app .tabs,
-            #rate-preset-app .result,
-            #rate-preset-app .details {
-                background: #1e293b
+            html {
+                -webkit-text-size-adjust: 100%;
+                text-size-adjust: 100%
             }
 
-            #rate-preset-app input,
-            #rate-preset-app .chip {
-                background: #111827;
-                border-color: #475569;
-                color: #f8fafc
+            body {
+                margin: 0;
+                min-width: 320px;
+                background: var(--bg);
+                color: var(--text);
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif
             }
 
-            #rate-preset-app .chip.active {
-                background: #172554;
-                border-color: #60a5fa;
-                color: #bfdbfe
+            button,
+            input {
+                font: inherit
             }
-        }
-    </style>
-    <main class="wrap">
-        <header>
-            <div style="font-size:12px;font-weight:900;color:#2563eb;letter-spacing:.12em">PACHINKO / SLOT</div>
-            <h1>あまり玉・収支計算</h1>
-            <p class="sub">貸出数と1,000円単位の交換率から、景品交換額・収支・あまり玉を計算します。</p>
-        </header>
-        <section class="card">
-            <div class="tabs"><button type="button" class="tab active" data-mode="p">パチンコ</button><button type="button" class="tab" data-mode="s">スロット</button></div><span class="title">貸出枚数・貸出玉数</span>
-            <div id="lendChips" class="chips"></div><span class="title">交換率プリセット</span>
-            <div id="exchangeChips" class="chips"></div>
-            <div class="grid" style="margin-top:15px">
-                <div><label for="lend">1,000円あたりの貸出数</label>
-                    <div class="input"><input id="lend" type="number" inputmode="decimal" min="0.01" step="0.01"><span class="suffix unit">玉</span></div>
-                </div>
-                <div><label for="exchange">1,000円の交換に必要な数</label>
-                    <div class="input"><input id="exchange" type="number" inputmode="decimal" min="0.01" step="0.01"><span class="suffix unit">玉</span></div>
-                </div>
-            </div>
-            <p id="example" class="hint"></p>
-        </section>
-        <section class="card">
-            <div class="grid">
-                <div><label id="heldLabel" for="held">獲得玉数</label>
-                    <div class="input"><input id="held" type="number" inputmode="numeric" min="0" step="1" value="5000"><span class="suffix unit">玉</span></div>
-                </div>
-                <div><label for="invest">投資金額</label>
-                    <div class="input"><input id="invest" type="number" inputmode="numeric" min="0" step="100" value="10000"><span class="suffix">円</span></div>
-                </div>
-            </div>
-            <div style="margin-top:13px"><label for="prize">景品交換の最小金額</label>
-                <div class="input"><input id="prize" type="number" inputmode="numeric" min="100" step="100" value="1000"><span class="suffix">円</span></div>
-            </div>
-        </section>
-        <section class="card" aria-live="polite">
-            <div class="hero">
-                <div style="font-size:12px;font-weight:800;color:#bfdbfe">交換後の収支</div>
-                <div id="profit" class="profit">0円</div>
-                <div id="profitNote" style="font-size:13px;color:#dbeafe"></div>
-            </div>
-            <div class="results">
-                <div class="result"><small>景品交換額</small><strong id="cash">0円</strong></div>
-                <div class="result"><small id="remTitle">あまり玉</small><strong id="remain">0玉</strong></div>
-            </div>
-            <div class="details">
-                <div class="row"><span>端数込み交換価値</span><strong id="raw">0円</strong></div>
-                <div class="row"><span>投入相当数</span><strong id="borrowed">0玉</strong></div>
-                <div class="row"><span>貸出単価</span><strong id="lendRate">0円／玉</strong></div>
-                <div class="row"><span>交換単価</span><strong id="exRate">0円／玉</strong></div>
-            </div>
-            <div id="error" class="error hidden"></div>
-        </section>
-        <p class="hint" style="text-align:center;padding:4px 8px 16px">実際の交換条件や景品構成は店舗ごとにご確認ください。</p>
-    </main>
-    <script>
-        (() => {
-            const root = document.getElementById('rate-preset-app');
-            const $ = s => root.querySelector(s);
-            const $$ = s => [...root.querySelectorAll(s)];
-            const cfg = {
-                p: {
-                    unit: '玉',
-                    held: '獲得玉数',
-                    rem: 'あまり玉',
-                    example: '例：28玉交換は、1,000円の交換に280玉必要です。手動では任意の数値を入力できます。',
-                    lend: [
-                        ['4パチ', 250],
-                        ['2パチ', 500],
-                        ['1パチ', 1000],
-                        ['0.5パチ', 2000],
-                        ['手動', null]
-                    ],
-                    exchange: [
-                        ['等価', 250],
-                        ['27.5玉', 275],
-                        ['28玉', 280],
-                        ['30玉', 300],
-                        ['手動', null]
-                    ]
-                },
-                s: {
-                    unit: '枚',
-                    held: '獲得枚数',
-                    rem: 'あまりメダル',
-                    example: '例：5.1枚交換は51枚、5.5枚交換は55枚です。手動では任意の数値を入力できます。',
-                    lend: [
-                        ['46枚', 46],
-                        ['50枚', 50],
-                        ['手動', null]
-                    ],
-                    exchange: [
-                        ['等価', 50],
-                        ['5.1枚', 51],
-                        ['5.2枚', 52],
-                        ['5.5枚', 55],
-                        ['手動', null]
-                    ]
+
+            button {
+                cursor: pointer;
+                touch-action: manipulation;
+                -webkit-tap-highlight-color: transparent
+            }
+
+            .app {
+                width: 100%;
+                min-height: 100dvh;
+                padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left))
+            }
+
+            .container {
+                width: 100%;
+                max-width: 540px;
+                margin: auto
+            }
+
+            .header {
+                padding: 2px 3px 4px
+            }
+
+            .eyebrow {
+                color: var(--brand);
+                font-size: 12px;
+                font-weight: 900;
+                letter-spacing: .12em
+            }
+
+            h1 {
+                margin: 5px 0 6px;
+                font-size: clamp(25px, 8vw, 34px);
+                line-height: 1.2
+            }
+
+            .description,
+            .hint {
+                color: var(--muted);
+                font-size: 12px;
+                line-height: 1.65
+            }
+
+            .description {
+                margin: 0
+            }
+
+            .card {
+                min-width: 0;
+                margin-top: 13px;
+                padding: 16px;
+                background: var(--panel);
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                box-shadow: var(--shadow)
+            }
+
+            .tabs {
+                display: flex;
+                gap: 5px;
+                padding: 4px;
+                background: var(--bg);
+                border-radius: 14px
+            }
+
+            .tab {
+                flex: 1;
+                min-height: 46px;
+                padding: 10px;
+                color: var(--muted);
+                font-weight: 900;
+                background: transparent;
+                border: 0;
+                border-radius: 10px
+            }
+
+            .tab.active {
+                color: #fff;
+                background: #0f172a
+            }
+
+            .section-title {
+                display: block;
+                margin: 17px 0 8px;
+                font-size: 13px;
+                font-weight: 900
+            }
+
+            .chips {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px
+            }
+
+            .chip {
+                width: 100%;
+                min-height: 44px;
+                padding: 8px 10px;
+                color: #334155;
+                font-size: 13px;
+                font-weight: 800;
+                background: var(--panel);
+                border: 1px solid #cbd5e1;
+                border-radius: 999px
+            }
+
+            .chip.active {
+                color: #1d4ed8;
+                background: var(--soft);
+                border-color: var(--brand)
+            }
+
+            .form-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 14px
+            }
+
+            label {
+                display: block;
+                margin-bottom: 6px;
+                font-size: 13px;
+                font-weight: 800
+            }
+
+            .input-wrap {
+                position: relative
+            }
+
+            input {
+                width: 100%;
+                min-height: 50px;
+                padding: 11px 54px 11px 13px;
+                color: var(--text);
+                font-size: 16px;
+                font-weight: 800;
+                background: var(--panel);
+                border: 1px solid #cbd5e1;
+                border-radius: 12px;
+                outline: none
+            }
+
+            input:focus {
+                border-color: var(--brand);
+                box-shadow: 0 0 0 3px rgba(37, 99, 235, .14)
+            }
+
+            button:focus-visible,
+            input:focus-visible {
+                outline: 3px solid rgba(37, 99, 235, .28);
+                outline-offset: 2px
+            }
+
+            .suffix {
+                position: absolute;
+                top: 50%;
+                right: 14px;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 800;
+                pointer-events: none;
+                transform: translateY(-50%)
+            }
+
+            .example {
+                margin: 10px 0 0
+            }
+
+            .hero {
+                padding: 18px;
+                color: #fff;
+                background: linear-gradient(135deg, #0f172a, #1e3a8a);
+                border-radius: 16px
+            }
+
+            .hero-label {
+                color: #bfdbfe;
+                font-size: 12px;
+                font-weight: 800
+            }
+
+            .profit {
+                margin-top: 4px;
+                overflow-wrap: anywhere;
+                font-size: clamp(32px, 11vw, 42px);
+                font-weight: 950;
+                line-height: 1.18
+            }
+
+            .profit-note {
+                margin-top: 5px;
+                color: #dbeafe;
+                font-size: 13px;
+                line-height: 1.5
+            }
+
+            .results {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 9px;
+                margin-top: 10px
+            }
+
+            .result {
+                min-width: 0;
+                padding: 13px;
+                background: var(--sub);
+                border-radius: 12px
+            }
+
+            .result small {
+                display: block;
+                color: var(--muted);
+                font-size: 12px;
+                font-weight: 800
+            }
+
+            .result strong {
+                display: block;
+                margin-top: 4px;
+                overflow-wrap: anywhere;
+                font-size: clamp(18px, 6vw, 22px)
+            }
+
+            .details {
+                margin-top: 10px;
+                padding: 8px 13px;
+                font-size: 13px;
+                background: var(--sub);
+                border-radius: 12px
+            }
+
+            .detail-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: baseline;
+                gap: 10px;
+                padding: 7px 0;
+                border-bottom: 1px solid rgba(148, 163, 184, .2)
+            }
+
+            .detail-row:last-child {
+                border-bottom: 0
+            }
+
+            .detail-row span {
+                color: var(--muted)
+            }
+
+            .detail-row strong {
+                max-width: 180px;
+                text-align: right;
+                overflow-wrap: anywhere
+            }
+
+            .error {
+                margin-top: 10px;
+                padding: 11px;
+                color: #b91c1c;
+                font-size: 13px;
+                font-weight: 800;
+                line-height: 1.5;
+                background: #fef2f2;
+                border: 1px solid #fecaca;
+                border-radius: 10px
+            }
+
+            .hidden {
+                display: none
+            }
+
+            .footer {
+                margin: 0;
+                padding: 14px 8px 4px;
+                text-align: center
+            }
+
+            @media(max-width:350px) {
+                .app {
+                    padding-left: 10px;
+                    padding-right: 10px
                 }
-            };
-            let mode = 'p';
-            const number = s => Number($(s).value);
-            const yen = v => Math.round(v).toLocaleString('ja-JP') + '円';
-            const qty = (v, u) => v.toLocaleString('ja-JP', {
-                maximumFractionDigits: 2
-            }) + u;
 
-            function renderChips(id, list, input) {
-                const box = $(id);
-                box.textContent = '';
-                list.forEach(item => {
-                    const b = document.createElement('button');
-                    b.type = 'button';
-                    b.className = 'chip';
-                    b.textContent = item[0];
-                    b.dataset.value = item[1] === null ? 'manual' : String(item[1]);
-                    b.addEventListener('click', () => {
-                        if (item[1] === null) {
-                            syncChips(id, input, list);
-                            $(input).focus();
-                            $(input).select()
-                        } else {
+                .card {
+                    padding: 14px
+                }
+
+                .chips,
+                .results {
+                    grid-template-columns: 1fr
+                }
+
+                .detail-row {
+                    grid-template-columns: 1fr;
+                    gap: 3px
+                }
+
+                .detail-row strong {
+                    max-width: none;
+                    text-align: left
+                }
+            }
+
+            @media(min-width:600px) {
+                .container {
+                    max-width: 720px
+                }
+
+                .form-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr))
+                }
+
+                .chips {
+                    display: flex;
+                    flex-wrap: wrap
+                }
+
+                .chip {
+                    width: auto;
+                    min-width: 92px;
+                    padding-left: 15px;
+                    padding-right: 15px
+                }
+            }
+
+            @media(prefers-color-scheme:dark) {
+                :root {
+                    --bg: #020617;
+                    --panel: #0f172a;
+                    --sub: #1e293b;
+                    --text: #e2e8f0;
+                    --muted: #94a3b8;
+                    --border: #334155;
+                    --soft: #172554;
+                    --shadow: none
+                }
+
+                input,
+                .chip {
+                    color: #f8fafc;
+                    background: #111827;
+                    border-color: #475569
+                }
+
+                .chip.active {
+                    color: #bfdbfe;
+                    background: #172554;
+                    border-color: #60a5fa
+                }
+
+                .error {
+                    color: #fecaca;
+                    background: #450a0a;
+                    border-color: #7f1d1d
+                }
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="rate-app" class="app">
+            <main class="container">
+                <header class="header">
+                    <div class="eyebrow">PACHINKO / SLOT</div>
+                    <h1>あまり玉・収支計算</h1>
+                    <p class="description">貸出数と1,000円単位の交換率から、景品交換額・収支・あまり玉を計算します。</p>
+                </header>
+                <section class="card" aria-label="交換条件">
+                    <div class="tabs" role="tablist" aria-label="遊技種別"><button type="button" class="tab active" role="tab" aria-selected="true" data-mode="p">パチンコ</button><button type="button" class="tab" role="tab" aria-selected="false" data-mode="s">スロット</button></div>
+                    <span class="section-title">貸出枚数・貸出玉数</span>
+                    <div id="lend-chips" class="chips"></div>
+                    <span class="section-title">交換率プリセット</span>
+                    <div id="exchange-chips" class="chips"></div>
+                    <div class="form-grid" style="margin-top:17px">
+                        <div><label for="lend">1,000円あたりの貸出数</label>
+                            <div class="input-wrap"><input id="lend" type="number" inputmode="decimal" min="0.01" max="1000000000" step="0.01"><span class="suffix unit">玉</span></div>
+                        </div>
+                        <div><label for="exchange">1,000円の交換に必要な数</label>
+                            <div class="input-wrap"><input id="exchange" type="number" inputmode="decimal" min="0.01" max="1000000000" step="0.01"><span class="suffix unit">玉</span></div>
+                        </div>
+                    </div>
+                    <p id="example" class="hint example"></p>
+                </section>
+                <section class="card" aria-label="獲得数と投資金額">
+                    <div class="form-grid">
+                        <div><label id="held-label" for="held">獲得玉数</label>
+                            <div class="input-wrap"><input id="held" type="number" inputmode="numeric" min="0" max="1000000000" step="1" value="5000"><span class="suffix unit">玉</span></div>
+                        </div>
+                        <div><label for="invest">投資金額</label>
+                            <div class="input-wrap"><input id="invest" type="number" inputmode="numeric" min="0" max="1000000000" step="100" value="10000"><span class="suffix">円</span></div>
+                        </div>
+                    </div>
+                    <div style="margin-top:14px"><label for="prize">景品交換の最小金額</label>
+                        <div class="input-wrap"><input id="prize" type="number" inputmode="numeric" min="1" max="1000000000" step="100" value="1000"><span class="suffix">円</span></div>
+                    </div>
+                </section>
+                <section class="card" aria-label="計算結果" aria-live="polite">
+                    <div class="hero">
+                        <div class="hero-label">交換後の収支</div>
+                        <div id="profit" class="profit">0円</div>
+                        <div id="profit-note" class="profit-note"></div>
+                    </div>
+                    <div class="results">
+                        <div class="result"><small>景品交換額</small><strong id="cash">0円</strong></div>
+                        <div class="result"><small id="remain-title">あまり玉</small><strong id="remain">0玉</strong></div>
+                    </div>
+                    <div class="details">
+                        <div class="detail-row"><span>端数込み交換価値</span><strong id="raw">0円</strong></div>
+                        <div class="detail-row"><span>投入相当数</span><strong id="borrowed">0玉</strong></div>
+                        <div class="detail-row"><span>貸出単価</span><strong id="lend-rate">0円／玉</strong></div>
+                        <div class="detail-row"><span>交換単価</span><strong id="exchange-rate">0円／玉</strong></div>
+                    </div>
+                    <div id="error" class="error hidden" role="alert"></div>
+                </section>
+                <p class="hint footer">実際の交換条件や景品構成は店舗ごとにご確認ください。</p>
+            </main>
+        </div>
+        <script>
+            (() => {
+                "use strict";
+                const root = document.getElementById("rate-app");
+                if (!root || root.dataset.initialized === "true") return;
+                root.dataset.initialized = "true";
+                const $ = s => root.querySelector(s),
+                    $$ = s => [...root.querySelectorAll(s)];
+                const config = {
+                    p: {
+                        unit: "玉",
+                        heldLabel: "獲得玉数",
+                        remainLabel: "あまり玉",
+                        example: "例：28玉交換は、1,000円の交換に280玉必要です。任意の交換条件も直接入力できます。",
+                        lend: [
+                            ["4パチ", 250],
+                            ["2パチ", 500],
+                            ["1パチ", 1000],
+                            ["0.5パチ", 2000],
+                            ["手動", null]
+                        ],
+                        exchange: [
+                            ["等価", 250],
+                            ["27.5玉", 275],
+                            ["28玉", 280],
+                            ["30玉", 300],
+                            ["手動", null]
+                        ]
+                    },
+                    s: {
+                        unit: "枚",
+                        heldLabel: "獲得枚数",
+                        remainLabel: "あまりメダル",
+                        example: "例：5.1枚交換は51枚、5.5枚交換は55枚です。任意の交換条件も直接入力できます。",
+                        lend: [
+                            ["46枚", 46],
+                            ["50枚", 50],
+                            ["手動", null]
+                        ],
+                        exchange: [
+                            ["等価", 50],
+                            ["5.1枚", 51],
+                            ["5.2枚", 52],
+                            ["5.5枚", 55],
+                            ["手動", null]
+                        ]
+                    }
+                };
+                let mode = "p";
+                const num = s => Number($(s).value),
+                    yen = v => Math.round(v).toLocaleString("ja-JP") + "円",
+                    qty = (v, u) => v.toLocaleString("ja-JP", {
+                        maximumFractionDigits: 2
+                    }) + u,
+                    rate = (v, u) => v.toLocaleString("ja-JP", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    }) + "円／" + u;
+
+                function sync(box, input, items) {
+                    const v = num(input),
+                        has = items.some(x => x[1] !== null && x[1] === v);
+                    $$(`${box} .chip`).forEach((b, i) => {
+                        const p = items[i][1],
+                            on = p === null ? !has : p === v;
+                        b.classList.toggle("active", on);
+                        b.setAttribute("aria-pressed", String(on))
+                    })
+                }
+
+                function render(box, items, input) {
+                    const c = $(box);
+                    c.replaceChildren();
+                    items.forEach(item => {
+                        const b = document.createElement("button");
+                        b.type = "button";
+                        b.className = "chip";
+                        b.textContent = item[0];
+                        b.setAttribute("aria-pressed", "false");
+                        b.addEventListener("click", () => {
+                            if (item[1] === null) {
+                                sync(box, input, items);
+                                $(input).focus();
+                                $(input).select();
+                                return
+                            }
                             $(input).value = item[1];
-                            syncChips(id, input, list);
+                            sync(box, input, items);
                             calc()
-                        }
+                        });
+                        c.appendChild(b)
                     });
-                    box.appendChild(b)
-                });
-                syncChips(id, input, list)
-            }
-
-            function syncChips(id, input, list) {
-                const value = number(input);
-                const hasPreset = list.some(x => x[1] !== null && x[1] === value);
-                $$(`${id} .chip`).forEach((chip, i) => {
-                    const preset = list[i][1];
-                    chip.classList.toggle('active', preset === null ? !hasPreset : preset === value)
-                })
-            }
-
-            function setMode(next) {
-                mode = next;
-                const c = cfg[mode];
-                $$('.tab').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-                $$('.unit').forEach(x => x.textContent = c.unit);
-                $('#heldLabel').textContent = c.held;
-                $('#remTitle').textContent = c.rem;
-                $('#example').textContent = c.example;
-                $('#lend').value = c.lend[0][1];
-                $('#exchange').value = c.exchange[0][1];
-                renderChips('#lendChips', c.lend, '#lend');
-                renderChips('#exchangeChips', c.exchange, '#exchange');
-                calc()
-            }
-
-            function calc() {
-                const lend = number('#lend'),
-                    ex = number('#exchange'),
-                    held = number('#held'),
-                    invest = number('#invest'),
-                    prize = number('#prize');
-                if (![lend, ex, held, invest, prize].every(Number.isFinite) || lend <= 0 || ex <= 0 || held < 0 || invest < 0 || prize <= 0) {
-                    $('#error').textContent = '貸出数・交換数・景品額は0より大きい値、獲得数・投資額は0以上で入力してください。';
-                    $('#error').classList.remove('hidden');
-                    return
+                    sync(box, input, items)
                 }
-                $('#error').classList.add('hidden');
-                const unit = cfg[mode].unit;
-                const raw = held / ex * 1000;
-                const cash = Math.floor((raw + 1e-9) / prize) * prize;
-                const used = cash / 1000 * ex;
-                const remain = Math.max(0, held - used);
-                const profit = cash - invest;
-                $('#cash').textContent = yen(cash);
-                $('#raw').textContent = yen(raw);
-                $('#remain').textContent = qty(remain, unit);
-                $('#borrowed').textContent = qty(invest / 1000 * lend, unit);
-                $('#lendRate').textContent = (1000 / lend).toLocaleString('ja-JP', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }) + '円／' + unit;
-                $('#exRate').textContent = (1000 / ex).toLocaleString('ja-JP', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }) + '円／' + unit;
-                $('#profit').textContent = (profit > 0 ? '+' : '') + yen(profit);
-                $('#profit').style.color = profit > 0 ? '#86efac' : profit < 0 ? '#fca5a5' : '#fff';
-                $('#profitNote').textContent = '投資 ' + yen(invest) + 'を差し引いた結果'
-            }
-            $$('.tab').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
-            $('#lend').addEventListener('input', () => {
-                syncChips('#lendChips', '#lend', cfg[mode].lend);
-                calc()
-            });
-            $('#exchange').addEventListener('input', () => {
-                syncChips('#exchangeChips', '#exchange', cfg[mode].exchange);
-                calc()
-            });
-            ['#held', '#invest', '#prize'].forEach(id => $(id).addEventListener('input', calc));
-            setMode('p')
-        })()
-    </script>
-</div>
+
+                function setMode(next) {
+                    mode = next;
+                    const c = config[mode];
+                    $$('.tab').forEach(b => {
+                        const on = b.dataset.mode === mode;
+                        b.classList.toggle('active', on);
+                        b.setAttribute('aria-selected', String(on))
+                    });
+                    $$('.unit').forEach(e => e.textContent = c.unit);
+                    $('#held-label').textContent = c.heldLabel;
+                    $('#remain-title').textContent = c.remainLabel;
+                    $('#example').textContent = c.example;
+                    $('#lend').value = c.lend[0][1];
+                    $('#exchange').value = c.exchange[0][1];
+                    render('#lend-chips', c.lend, '#lend');
+                    render('#exchange-chips', c.exchange, '#exchange');
+                    calc()
+                }
+
+                function clear() {
+                    const u = config[mode].unit;
+                    $('#profit').textContent = '0円';
+                    $('#profit').style.color = '#fff';
+                    $('#profit-note').textContent = '入力内容を確認してください';
+                    $('#cash').textContent = $('#raw').textContent = '0円';
+                    $('#remain').textContent = $('#borrowed').textContent = '0' + u;
+                    $('#lend-rate').textContent = $('#exchange-rate').textContent = '0円／' + u
+                }
+
+                function error(msg) {
+                    clear();
+                    $('#error').textContent = msg;
+                    $('#error').classList.remove('hidden')
+                }
+
+                function calc() {
+                    const lend = num('#lend'),
+                        ex = num('#exchange'),
+                        held = num('#held'),
+                        invest = num('#invest'),
+                        prize = num('#prize'),
+                        values = [lend, ex, held, invest, prize];
+                    if (!values.every(Number.isFinite)) {
+                        error('すべての項目に数値を入力してください。');
+                        return
+                    }
+                    if (lend <= 0 || ex <= 0 || prize <= 0 || held < 0 || invest < 0) {
+                        error('貸出数・交換数・最小景品額は0より大きい値、獲得数・投資額は0以上で入力してください。');
+                        return
+                    }
+                    if (values.some(v => v > 1000000000)) {
+                        error('入力できる数値の上限は10億です。');
+                        return
+                    }
+                    $('#error').classList.add('hidden');
+                    const u = config[mode].unit,
+                        raw = held / ex * 1000,
+                        cash = Math.floor((raw + 1e-9) / prize) * prize,
+                        used = cash / 1000 * ex,
+                        remain = Math.max(0, held - used),
+                        profit = cash - invest;
+                    $('#cash').textContent = yen(cash);
+                    $('#raw').textContent = yen(raw);
+                    $('#remain').textContent = qty(remain, u);
+                    $('#borrowed').textContent = qty(invest / 1000 * lend, u);
+                    $('#lend-rate').textContent = rate(1000 / lend, u);
+                    $('#exchange-rate').textContent = rate(1000 / ex, u);
+                    $('#profit').textContent = (profit > 0 ? '+' : '') + yen(profit);
+                    $('#profit').style.color = profit > 0 ? '#86efac' : profit < 0 ? '#fca5a5' : '#fff';
+                    $('#profit-note').textContent = '投資 ' + yen(invest) + 'を差し引いた結果'
+                }
+                $$('.tab').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+                $('#lend').addEventListener('input', () => {
+                    sync('#lend-chips', '#lend', config[mode].lend);
+                    calc()
+                });
+                $('#exchange').addEventListener('input', () => {
+                    sync('#exchange-chips', '#exchange', config[mode].exchange);
+                    calc()
+                });
+                ['#held', '#invest', '#prize'].forEach(s => $(s).addEventListener('input', calc));
+                setMode('p')
+            })();
+        </script>
+    </body>
+
+</html>
